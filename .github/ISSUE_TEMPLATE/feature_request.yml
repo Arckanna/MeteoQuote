@@ -1,0 +1,18 @@
+name: Feature request
+description: Suggérer une amélioration ou une nouvelle fonctionnalité
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: Besoin / Problème
+      placeholder: "En tant qu’utilisateur, j’aimerais…"
+  - type: textarea
+    attributes:
+      label: Proposition
+      placeholder: "Ajouter… / Modifier…"
+  - type: textarea
+    attributes:
+      label: Alternatives considérées
+  - type: textarea
+    attributes:
+      label: Contexte additionnel

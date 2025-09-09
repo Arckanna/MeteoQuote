@@ -15,11 +15,11 @@ captures/
 key.properties
 
 # Outputs
+**/outputs/
 app/release/
 app/debug/
 *.apk
 *.aab
-**/outputs/
 **/mapping.txt
 
 # Logs & OS
