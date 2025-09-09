@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="status_clear">#FFA99F</color>
+    <color name="status_clouds">#BFCAD9</color>
+    <color name="status_rain">#6CA8F7</color>
+    <color name="status_snow">#E6F3FF</color>
+    <color name="status_fog">#D5DAE0</color>
+    <color name="status_thunder">#818CF8</color>
+</resources>
