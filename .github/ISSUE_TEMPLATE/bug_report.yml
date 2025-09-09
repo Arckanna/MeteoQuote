@@ -1,0 +1,28 @@
+name: Bug report
+description: Signaler un bug dans l'app
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: Description
+      placeholder: "Ce qui ne va pas…"
+  - type: textarea
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: "1. …\n2. …\n3. …"
+  - type: input
+    attributes:
+      label: Version de l'app
+      placeholder: "ex: 4.1"
+  - type: input
+    attributes:
+      label: Version Android
+      placeholder: "ex: 14 (SDK 34)"
+  - type: input
+    attributes:
+      label: Appareil
+      placeholder: "ex: Samsung Galaxy Z Fold 6"
+  - type: textarea
+    attributes:
+      label: Logs / captures
+      placeholder: "Joindre des captures ou logs si possible"
