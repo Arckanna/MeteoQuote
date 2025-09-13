@@ -434,7 +434,8 @@ class MainActivity : AppCompatActivity() {
     // ---- Bouton "Envoyer un retour" ----
     private fun sendFeedbackEmail(isBeta: Boolean) {
         val address = if (isBeta) "ivray3dlabs+beta@gmail.com" else "ivray3dlabs+support@gmail.com"
-        val (appId, vName, vCode) = appInfo() // ta fonction ou BuildConfig si activé
+
+        val (appId, vName, vCode) = appInfo() // ou BuildConfig si activé
         val subject = "[Meteo & Citation] Retour testeur V$vName"
         val body = buildString {
             appendLine("Merci pour votre retour 🙌")
@@ -451,29 +452,24 @@ class MainActivity : AppCompatActivity() {
             appendLine("Appareil : ${Build.MANUFACTURER} ${Build.MODEL}")
         }
 
-        // 1) Essai strict: apps e-mail uniquement
-        val sendTo = Intent(Intent.ACTION_SENDTO).apply {
-            data = Uri.parse("mailto:")                 // ← important
-            putExtra(Intent.EXTRA_EMAIL, arrayOf(address))
-            putExtra(Intent.EXTRA_SUBJECT, subject)
-            putExtra(Intent.EXTRA_TEXT, body)
+        // Selector qui limite strictement aux apps e-mail
+        val emailSelector = Intent(Intent.ACTION_SENDTO).apply {
+            data = Uri.parse("mailto:")
         }
-        try {
-            startActivity(Intent.createChooser(sendTo, "Envoyer par e-mail"))
-            return
-        } catch (_: ActivityNotFoundException) { /* on tente le fallback */ }
 
-        // 2) Fallback: message/rfc822 (inclut Gmail, Outlook, etc.)
-        val sendAny = Intent(Intent.ACTION_SEND).apply {
-            type = "message/rfc822"
+        // Intent d’envoi, filtré par le selector ci-dessus
+        val emailIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
             putExtra(Intent.EXTRA_EMAIL, arrayOf(address))
             putExtra(Intent.EXTRA_SUBJECT, subject)
             putExtra(Intent.EXTRA_TEXT, body)
+            selector = emailSelector
         }
+
         try {
-            startActivity(Intent.createChooser(sendAny, "Envoyer par e-mail"))
+            startActivity(Intent.createChooser(emailIntent, "Envoyer par e-mail"))
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "Aucun client e-mail trouvé", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Installe une application e-mail (Gmail, Outlook…)", Toast.LENGTH_SHORT).show()
         }
     }
 
