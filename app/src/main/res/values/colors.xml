@@ -8,4 +8,10 @@
     <color name="status_snow">#E6F3FF</color>
     <color name="status_fog">#D5DAE0</color>
     <color name="status_thunder">#818CF8</color>
+    <color name="uv_low">#2ECC71</color>       <!-- vert -->
+    <color name="uv_mod">#F1C40F</color>       <!-- jaune -->
+    <color name="uv_high">#E67E22</color>      <!-- orange -->
+    <color name="uv_veryhigh">#E74C3C</color>  <!-- rouge -->
+    <color name="uv_extreme">#8E44AD</color>   <!-- violet -->
+
 </resources>

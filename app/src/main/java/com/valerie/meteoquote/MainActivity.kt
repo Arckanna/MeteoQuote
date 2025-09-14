@@ -43,12 +43,23 @@ import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
 import android.view.View
+import android.content.res.ColorStateList
+import android.graphics.Typeface
+import androidx.core.view.updateLayoutParams
 
 
 data class City(val label: String, val lat: Double, val lon: Double)
 data class HourlyForecast(val time: LocalDateTime, val temp: Double, val code: Int)
 data class DailyForecast(val date: LocalDate, val tmin: Double, val tmax: Double, val code: Int)
 data class Quote(val text: String, val author: String)
+data class WeatherResult(
+    val current: Pair<Double, Int>,
+    val hourly: List<HourlyForecast>,
+    val daily: List<DailyForecast>,
+    val uvNow: Double,
+    val uvMaxToday: Double
+)
+
 
 class MainActivity : AppCompatActivity() {
 
@@ -77,6 +88,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnRefresh: Button
     private lateinit var cityNamesAdapter: ArrayAdapter<String>
     private lateinit var rootContainer: ViewGroup
+    private var tvUv: TextView? = null
+
     private var currentThemeRes: Int? = null
     private var currentStatusColor: Int? = null
     private var lastWeatherCode: Int? = null
@@ -86,15 +99,18 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        tvUv = findViewById(R.id.tvUv)
+        tvUv?.updateLayoutParams<LinearLayout.LayoutParams> {
+            topMargin = dp(16)
+        }
 
         rootContainer = findViewById(R.id.rootContainer)
-
         spinner = findViewById(R.id.spinnerCities)
         ivIcon = findViewById(R.id.ivIcon)
         tvCondition = findViewById(R.id.tvCondition)
-
         tvTemp = findViewById(R.id.tvTemp)
         tvUpdated = findViewById(R.id.tvUpdated)
+        tvUpdated.visibility = View.GONE
         tvQuote = findViewById(R.id.tvQuote)
         btnRefresh = findViewById(R.id.btnRefresh)
         containerHourly = findViewById(R.id.containerHourly)
@@ -171,6 +187,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        tvUv = findViewById(R.id.tvUv)
 
         // Premier chargement
         refresh()
@@ -183,12 +200,13 @@ class MainActivity : AppCompatActivity() {
         // État d'attente
         tvCondition.text = "Chargement…"
         tvTemp.text = "— °C"
-        tvUpdated.text = ""
+        tvUpdated.visibility = View.GONE   // garde caché en permanence
+
 
         ioScope.launch {
             try {
-                val (current, hourly, daily) = fetchFullWeather(city.lat, city.lon)
-                val (temp, code) = current
+                val result = fetchFullWeather(city.lat, city.lon)
+                val (temp, code) = result.current
                 val label = wmoToLabel(code)
 
                 withContext(Dispatchers.Main) {
@@ -196,6 +214,7 @@ class MainActivity : AppCompatActivity() {
                     tvCondition.text = label
                     tvTemp.text = String.format("%.1f °C", temp)
                     tvUpdated.text = "Maj: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+
                     applyWeatherTheme(code)
                     val light = isBgLight(code)
                     applyContentColorsFor(light)
@@ -204,11 +223,22 @@ class MainActivity : AppCompatActivity() {
                     lastWeatherCode = code
                     tvQuote.text = nextQuote(LocalDate.now(), code, advance = false)
 
-// Rendu des prévisions (on passe la couleur à utiliser)
-                    renderHourly(hourly, light)
-                    renderDaily(daily, light)
+                    // UV badge
+                    val (uvLabel, uvColor) = uvCategory(result.uvMaxToday)
+                    tvUv?.let { uv ->
+                        uv.setBackgroundResource(R.drawable.bg_uv_chip) // au cas où
+                        uv.text = String.format("UV %.1f • pic %.1f — %s", result.uvNow, result.uvMaxToday, uvLabel)
+                        ViewCompat.setBackgroundTintList(uv, ColorStateList.valueOf(uvColor))
+                        uv.setTextColor(Color.WHITE)
+                        uv.visibility = View.VISIBLE
+                    }
 
+                    tvUv?.backgroundTintList = ColorStateList.valueOf(uvColor)
+                    // Rendus
+                    renderHourly(result.hourly, light)
+                    renderDaily(result.daily, light)
                 }
+
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     ivIcon.setImageResource(wmoToIconRes(3)) // fallback "nuageux"
@@ -272,14 +302,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---- Récupération météo ----
-    private fun fetchFullWeather(lat: Double, lon: Double): Triple<Pair<Double, Int>, List<HourlyForecast>, List<DailyForecast>> {
-        val url =
-            "https://api.open-meteo.com/v1/forecast" +
-                    "?latitude=$lat&longitude=$lon" +
-                    "&current=temperature_2m,weather_code" +
-                    "&hourly=temperature_2m,weather_code" +
-                    "&daily=weather_code,temperature_2m_max,temperature_2m_min" +
-                    "&timezone=auto"
+    private fun fetchFullWeather(lat: Double, lon: Double): WeatherResult {
+        val url = "https://api.open-meteo.com/v1/forecast" +
+                "?latitude=$lat&longitude=$lon" +
+                "&current=temperature_2m,weather_code" +
+                "&hourly=temperature_2m,weather_code,uv_index" +
+                "&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max" +
+                "&timezone=auto"
 
         val body = URL(url).openStream().bufferedReader().use { it.readText() }
         val root = JSONObject(body)
@@ -289,15 +318,23 @@ class MainActivity : AppCompatActivity() {
         val currentTemp = cur.getDouble("temperature_2m")
         val currentCode = cur.getInt("weather_code")
 
-        // Hourly (24 prochaines heures >= maintenant)
+        // Hourly
         val hourly = root.getJSONObject("hourly")
         val hTimes = hourly.getJSONArray("time")
         val hTemps = hourly.getJSONArray("temperature_2m")
         val hCodes = hourly.getJSONArray("weather_code")
+        val hUv    = hourly.getJSONArray("uv_index")
         val now = LocalDateTime.now()
+
         val hList = mutableListOf<HourlyForecast>()
+        var uvNow = 0.0
+        var grabbedUv = false
         for (i in 0 until hTimes.length()) {
-            val t = LocalDateTime.parse(hTimes.getString(i)) // ISO_LOCAL_DATE_TIME
+            val t = LocalDateTime.parse(hTimes.getString(i))
+            if (!grabbedUv && !t.isBefore(now)) {
+                uvNow = hUv.optDouble(i, 0.0)
+                grabbedUv = true
+            }
             if (!t.isBefore(now)) {
                 hList.add(HourlyForecast(t, hTemps.getDouble(i), hCodes.getInt(i)))
             }
@@ -310,14 +347,35 @@ class MainActivity : AppCompatActivity() {
         val dMax = daily.getJSONArray("temperature_2m_max")
         val dMin = daily.getJSONArray("temperature_2m_min")
         val dCodes = daily.getJSONArray("weather_code")
+        val dUvMax = daily.getJSONArray("uv_index_max")
         val dList = mutableListOf<DailyForecast>()
         val daysToTake = minOf(7, dTimes.length())
         for (i in 0 until daysToTake) {
             val d = LocalDate.parse(dTimes.getString(i))
             dList.add(DailyForecast(d, dMin.getDouble(i), dMax.getDouble(i), dCodes.getInt(i)))
         }
+        val uvMaxToday = if (dUvMax.length() > 0) dUvMax.getDouble(0) else 0.0
 
-        return Triple(currentTemp to currentCode, hList, dList)
+        return WeatherResult(currentTemp to currentCode, hList, dList, uvNow, uvMaxToday)
+    }
+
+
+    private fun uvCategory(v: Double): Pair<String, Int> {
+        val resId = when {
+            v < 3  -> R.color.uv_low
+            v < 6  -> R.color.uv_mod
+            v < 8  -> R.color.uv_high
+            v < 11 -> R.color.uv_veryhigh
+            else   -> R.color.uv_extreme
+        }
+        val label = when {
+            v < 3  -> "Faible"
+            v < 6  -> "Modéré"
+            v < 8  -> "Élevé"
+            v < 11 -> "Très élevé"
+            else   -> "Extrême"
+        }
+        return label to ContextCompat.getColor(this, resId)
     }
 
     /** Géocodage Open-Meteo : nom de ville → (lat, lon) */
