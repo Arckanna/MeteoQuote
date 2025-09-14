@@ -44,7 +44,6 @@ import android.net.Uri
 import android.content.pm.PackageManager
 import android.view.View
 import android.content.res.ColorStateList
-import android.graphics.Typeface
 import androidx.core.view.updateLayoutParams
 
 
@@ -151,11 +150,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // ➕ Bouton "Envoyer un retour" (null-safe si pas encore dans le layout)
         findViewById<Button?>(R.id.btnFeedback)?.setOnClickListener {
-            // En phase de test on envoie sur +beta ; en prod tu peux passer à +support
-            sendFeedbackEmail(isBeta = true)
+            openFeedbackForm()
         }
+
 
         // Recherche & ajout de ville
         val etCitySearch: EditText = findViewById(R.id.etCitySearch)
@@ -634,21 +632,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun appInfo(): Triple<String, String, Long> {
-        val pm = packageManager
-        val pn = packageName
-        val pi = if (Build.VERSION.SDK_INT >= 33) {
-            pm.getPackageInfo(pn, PackageManager.PackageInfoFlags.of(0))
-        } else {
-            @Suppress("DEPRECATION")
-            pm.getPackageInfo(pn, 0)
-        }
-        val vName = pi.versionName ?: "?"
-        val vCode = if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode
-        else @Suppress("DEPRECATION") pi.versionCode.toLong()
-        return Triple(pn, vName, vCode)
-    }
-
     // Fond "clair" ? -> texte foncé ; sinon texte clair
     private fun isBgLight(code: Int): Boolean = when (code) {
         0, 1, 2, 3, 45, 48, 71, 73, 75, 85, 86 -> true   // clair, nuages, brouillard, neige
@@ -715,6 +698,46 @@ class MainActivity : AppCompatActivity() {
         iv.setPadding(pad(paddingDp), pad(paddingDp), pad(paddingDp), pad(paddingDp))
     }
 
+    private fun appInfo(): Triple<String, String, Int> {
+        val appId = packageName
+        val pm = packageManager
+        val pInfo = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            pm.getPackageInfo(appId, PackageManager.PackageInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageInfo(appId, 0)
+        }
+        val vName = pInfo.versionName ?: "?"
+        val vCode = if (android.os.Build.VERSION.SDK_INT >= 28)
+            (pInfo.longVersionCode and 0xFFFFFFFF).toInt()
+        else @Suppress("DEPRECATION") pInfo.versionCode
+        return Triple(appId, vName, vCode)
+    }
+
+    private fun openFeedbackForm() {
+        val (appId, vName, vCode) = appInfo()
+
+        // Base du formulaire (ton FORM_ID)
+        val formBase = "https://docs.google.com/forms/d/e/1FAIpQLSf1PBwF2QuVXHx8IfWM12jCh-7Tc0LhRgwfQZVBLZ_29bS6zg/viewform"
+
+        // Tes champs préremplis (entry.*)
+        val entryVersion = "entry.621899440"     // « Version de l’app »
+        val entryAndroid = "entry.1531362918"    // « Android (version / SDK) »
+        val entryDevice  = "entry.1583715954"    // « Appareil »
+
+        val url = Uri.parse(formBase).buildUpon()
+            .appendQueryParameter("usp", "pp_url") // mode prérempli
+            .appendQueryParameter(entryVersion, "$appId $vName ($vCode)")
+            .appendQueryParameter(entryAndroid, "${android.os.Build.VERSION.RELEASE} / SDK ${android.os.Build.VERSION.SDK_INT}")
+            .appendQueryParameter(entryDevice, "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            .build()
+
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, url))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Impossible d’ouvrir le formulaire.", Toast.LENGTH_LONG).show()
+        }
+    }
     override fun onDestroy() {
         super.onDestroy()
         ioScope.cancel()
