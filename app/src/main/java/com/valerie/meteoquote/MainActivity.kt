@@ -42,7 +42,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
-
+import android.view.View
 
 
 data class City(val label: String, val lat: Double, val lon: Double)
@@ -434,8 +434,7 @@ class MainActivity : AppCompatActivity() {
     // ---- Bouton "Envoyer un retour" ----
     private fun sendFeedbackEmail(isBeta: Boolean) {
         val address = if (isBeta) "ivray3dlabs+beta@gmail.com" else "ivray3dlabs+support@gmail.com"
-
-        val (appId, vName, vCode) = appInfo() // ou BuildConfig si activé
+        val (appId, vName, vCode) = appInfo()
         val subject = "[Meteo & Citation] Retour testeur V$vName"
         val body = buildString {
             appendLine("Merci pour votre retour 🙌")
@@ -452,26 +451,22 @@ class MainActivity : AppCompatActivity() {
             appendLine("Appareil : ${Build.MANUFACTURER} ${Build.MODEL}")
         }
 
-        // Selector qui limite strictement aux apps e-mail
-        val emailSelector = Intent(Intent.ACTION_SENDTO).apply {
-            data = Uri.parse("mailto:")
-        }
-
-        // Intent d’envoi, filtré par le selector ci-dessus
-        val emailIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_EMAIL, arrayOf(address))
+        val uri = Uri.parse("mailto:$address")
+        val email = Intent(Intent.ACTION_SENDTO, uri).apply {
             putExtra(Intent.EXTRA_SUBJECT, subject)
             putExtra(Intent.EXTRA_TEXT, body)
-            selector = emailSelector
         }
-
         try {
-            startActivity(Intent.createChooser(emailIntent, "Envoyer par e-mail"))
+            startActivity(Intent.createChooser(email, "Envoyer par e-mail"))
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "Installe une application e-mail (Gmail, Outlook…)", Toast.LENGTH_SHORT).show()
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.gm")))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Installe une application e-mail (Gmail, Outlook…)", Toast.LENGTH_LONG).show()
+            }
         }
     }
+
 
     // ---- Persistance villes ----
     private fun saveCities() {
@@ -602,13 +597,52 @@ class MainActivity : AppCompatActivity() {
         else -> false                                    // pluie/orage plutôt sombres
     }
 
+    // Remplace ENTIEREMENT applyContentColorsFor(...)
     private fun applyContentColorsFor(useDarkText: Boolean) {
-        val primary = if (useDarkText) 0xFF111111.toInt() else Color.WHITE
+        // Texte principal: noir (lisible sur tes fonds clairs), secondaire: gris
+        val primary   = 0xFF111111.toInt()
+        val secondary = 0xFF5E5E5E.toInt()
+
         tvCondition.setTextColor(primary)
         tvTemp.setTextColor(primary)
-        tvUpdated.setTextColor(primary)
         tvQuote.setTextColor(primary)
+        tvUpdated.setTextColor(secondary)
+
+        findViewById<TextView?>(R.id.tvAppTitle)?.setTextColor(primary)
+        findViewById<TextView?>(R.id.tvHourlyTitle)?.setTextColor(secondary)
+        findViewById<TextView?>(R.id.tvDailyTitle)?.setTextColor(secondary)
+        findViewById<TextView?>(R.id.tvQuoteTitle)?.setTextColor(secondary)
+
+        findViewById<EditText?>(R.id.etCitySearch)?.apply {
+            setTextColor(primary)
+            setHintTextColor(secondary)
+        }
+
+        // Met la couleur du texte de l'élément SÉLECTIONNÉ du spinner
+        (spinner.selectedView as? TextView)?.setTextColor(primary)
     }
+
+
+    // AJOUTE ce helper
+    private fun buildCityAdapter(useDarkText: Boolean): ArrayAdapter<String> {
+        val textColor = if (useDarkText) 0xFF111111.toInt() else Color.WHITE
+        val labels = cities.map { it.label }.toMutableList()
+        return object : ArrayAdapter<String>(
+            this, android.R.layout.simple_spinner_dropdown_item, labels
+        ) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getView(position, convertView, parent) as TextView
+                v.setTextColor(textColor)
+                return v
+            }
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getDropDownView(position, convertView, parent) as TextView
+                v.setTextColor(textColor)
+                return v
+            }
+        }
+    }
+
 
     private fun pad(v: Int) = (v * resources.displayMetrics.density).toInt()
 

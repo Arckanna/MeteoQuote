@@ -11,6 +11,7 @@
         android:layout_height="wrap_content">
 
         <TextView
+            android:id="@+id/tvAppTitle"
             android:text="@string/title_meteo_citation"
             android:textStyle="bold"
             android:textSize="20sp"
@@ -106,6 +107,7 @@
 
         <!-- ===== Prévisions : Aujourd'hui + 24 h ===== -->
         <TextView
+            android:id="@+id/tvHourlyTitle"
             android:text="Aujourd'hui + 24 h"
             android:textStyle="bold"
             android:layout_width="match_parent"
@@ -129,6 +131,7 @@
 
         <!-- ===== Prévisions : 7 jours ===== -->
         <TextView
+            android:id="@+id/tvDailyTitle"
             android:text="7 jours"
             android:textStyle="bold"
             android:layout_width="match_parent"
@@ -150,6 +153,7 @@
             android:background="?android:attr/listDivider" />
 
         <TextView
+            android:id="@+id/tvQuoteTitle"
             android:text="Citation du jour"
             android:textStyle="bold"
             android:layout_width="match_parent"
