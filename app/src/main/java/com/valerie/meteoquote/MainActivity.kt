@@ -2,6 +2,12 @@ package com.valerie.meteoquote
 
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 
 import android.os.Build
 import android.content.Context
@@ -41,7 +47,6 @@ import androidx.core.view.ViewCompat
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
-import android.content.pm.PackageManager
 import android.view.View
 import android.content.res.ColorStateList
 import androidx.core.view.updateLayoutParams
@@ -56,7 +61,8 @@ data class WeatherResult(
     val hourly: List<HourlyForecast>,
     val daily: List<DailyForecast>,
     val uvNow: Double,
-    val uvMaxToday: Double
+    val uvMaxToday: Double,
+    
 )
 
 
@@ -92,6 +98,13 @@ class MainActivity : AppCompatActivity() {
     private var currentThemeRes: Int? = null
     private var currentStatusColor: Int? = null
     private var lastWeatherCode: Int? = null
+    private val coarsePermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) locateAndSelectCity() else
+            Toast.makeText(this, "Autorise la localisation pour utiliser \"Ma position\"", Toast.LENGTH_SHORT).show()
+    }
+    private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
 
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -114,6 +127,7 @@ class MainActivity : AppCompatActivity() {
         btnRefresh = findViewById(R.id.btnRefresh)
         containerHourly = findViewById(R.id.containerHourly)
         containerDaily = findViewById(R.id.containerDaily)
+
 
         // Sur API 35+, la status bar est transparente : on laisse le BACKGROUND passer sous la barre
         // et on décale le contenu via les insets pour éviter le chevauchement.
@@ -153,6 +167,11 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button?>(R.id.btnFeedback)?.setOnClickListener {
             openFeedbackForm()
         }
+        findViewById<Button>(R.id.btnLocate).setOnClickListener {
+            val granted = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (granted) locateAndSelectCity() else coarsePermLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+
 
 
         // Recherche & ajout de ville
@@ -399,6 +418,28 @@ class MainActivity : AppCompatActivity() {
         val lon = first.getDouble("longitude")
         return City(label, lat, lon)
     }
+
+    /** Reverse geocoding Open-Meteo : (lat, lon) -> City(label) */
+    private fun reverseGeocode(lat: Double, lon: Double): City? {
+        val url = "https://geocoding-api.open-meteo.com/v1/reverse?latitude=$lat&longitude=$lon&language=fr&format=json"
+        val body = URL(url).openStream().bufferedReader().use { it.readText() }
+        val results = JSONObject(body).optJSONArray("results") ?: return null
+        if (results.length() == 0) return null
+        val first = results.getJSONObject(0)
+
+        val nm = first.optString("name", "Ma position")
+        val admin1 = first.optString("admin1", "")
+        val country = first.optString("country_code", "")
+        val label = when {
+            admin1.isNotEmpty() && country.isNotEmpty() -> "$nm, $admin1 ($country)"
+            country.isNotEmpty() -> "$nm ($country)"
+            else -> nm
+        }
+        val la = first.optDouble("latitude", lat)
+        val lo = first.optDouble("longitude", lon)
+        return City(label, la, lo)
+    }
+
 
     // ---- Libellés & icônes ----
     private fun wmoToLabel(code: Int): String = when (code) {
@@ -738,6 +779,52 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Impossible d’ouvrir le formulaire.", Toast.LENGTH_LONG).show()
         }
     }
+
+    private fun locateAndSelectCity() {
+        // 1) Essaye une position courante “one-shot”
+        val cts = CancellationTokenSource()
+        try {
+            fused.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, cts.token)
+                .addOnSuccessListener { loc ->
+                    if (loc != null) {
+                        onLocationReady(loc.latitude, loc.longitude)
+                    } else {
+                        // 2) Fallback: dernière position connue
+                        fused.lastLocation.addOnSuccessListener { last ->
+                            if (last != null) onLocationReady(last.latitude, last.longitude)
+                            else Toast.makeText(this, "Position indisponible. Active la localisation.", Toast.LENGTH_SHORT).show()
+                        }.addOnFailureListener {
+                            Toast.makeText(this, "Impossible d’obtenir la position.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                .addOnFailureListener {
+                    Toast.makeText(this, "Erreur de localisation.", Toast.LENGTH_SHORT).show()
+                }
+        } catch (_: SecurityException) {
+            Toast.makeText(this, "Permission localisation requise.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun onLocationReady(lat: Double, lon: Double) {
+        // Reverse géocodage (Open-Meteo) puis sélection/ajout dans la liste
+        ioScope.launch {
+            val city = reverseGeocode(lat, lon) ?: City("Ma position", lat, lon)
+            withContext(Dispatchers.Main) {
+                // évite doublon par libellé
+                val exists = cities.any { it.label.equals(city.label, ignoreCase = true) }
+                if (!exists) {
+                    cities.add(0, city) // tout en haut
+                    cityNamesAdapter.insert(city.label, 0)
+                }
+                spinner.setSelection(0)
+                saveCities()
+                refresh()
+                Toast.makeText(this@MainActivity, "Ville détectée : ${city.label}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         ioScope.cancel()

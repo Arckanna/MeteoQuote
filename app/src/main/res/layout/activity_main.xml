@@ -46,6 +46,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp" />
+        <Button
+            android:id="@+id/btnLocate"
+            android:text="📍 Ma position"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
 
         <Button
             android:id="@+id/btnRefresh"
