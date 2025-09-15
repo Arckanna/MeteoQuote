@@ -62,9 +62,8 @@ data class WeatherResult(
     val daily: List<DailyForecast>,
     val uvNow: Double,
     val uvMaxToday: Double,
-    
+    val uvPeakTime: LocalDateTime?
 )
-
 
 class MainActivity : AppCompatActivity() {
 
@@ -94,7 +93,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cityNamesAdapter: ArrayAdapter<String>
     private lateinit var rootContainer: ViewGroup
     private var tvUv: TextView? = null
-
     private var currentThemeRes: Int? = null
     private var currentStatusColor: Int? = null
     private var lastWeatherCode: Int? = null
@@ -105,7 +103,6 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Autorise la localisation pour utiliser \"Ma position\"", Toast.LENGTH_SHORT).show()
     }
     private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
-
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -219,7 +216,6 @@ class MainActivity : AppCompatActivity() {
         tvTemp.text = "— °C"
         tvUpdated.visibility = View.GONE   // garde caché en permanence
 
-
         ioScope.launch {
             try {
                 val result = fetchFullWeather(city.lat, city.lon)
@@ -242,12 +238,14 @@ class MainActivity : AppCompatActivity() {
 
                     // UV badge
                     val (uvLabel, uvColor) = uvCategory(result.uvMaxToday)
-                    tvUv?.let { uv ->
-                        uv.setBackgroundResource(R.drawable.bg_uv_chip) // au cas où
-                        uv.text = String.format("UV %.1f • pic %.1f — %s", result.uvNow, result.uvMaxToday, uvLabel)
-                        ViewCompat.setBackgroundTintList(uv, ColorStateList.valueOf(uvColor))
-                        uv.setTextColor(Color.WHITE)
-                        uv.visibility = View.VISIBLE
+                    val peakTxt = result.uvPeakTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "—"
+                    tvUv?.apply {
+                        setBackgroundResource(R.drawable.bg_uv_chip)
+                        text = String.format("UV %.1f • pic %.1f à %s — %s",
+                            result.uvNow, result.uvMaxToday, peakTxt, uvLabel)
+                        backgroundTintList = ColorStateList.valueOf(uvColor)
+                        setTextColor(Color.WHITE)
+                        visibility = View.VISIBLE
                     }
 
                     tvUv?.backgroundTintList = ColorStateList.valueOf(uvColor)
@@ -278,6 +276,7 @@ class MainActivity : AppCompatActivity() {
         95, 96, 99 -> R.drawable.bg_weather_thunder
         else -> R.drawable.bg_weather_clouds
     }
+
     private fun statusColorRes(code: Int): Int = when (code) {
         0 -> R.color.status_clear
         1, 2, 3 -> R.color.status_clouds
@@ -287,6 +286,7 @@ class MainActivity : AppCompatActivity() {
         95, 96, 99 -> R.color.status_thunder
         else -> R.color.status_clouds
     }
+
     private fun applyWeatherTheme(code: Int, durationMs: Long = 350L) {
         val newBgRes = themeDrawableRes(code)
         val newStatus = ContextCompat.getColor(this, statusColorRes(code))
@@ -358,6 +358,8 @@ class MainActivity : AppCompatActivity() {
             if (hList.size >= 24) break
         }
 
+
+
         // Daily (7 jours)
         val daily = root.getJSONObject("daily")
         val dTimes = daily.getJSONArray("time")
@@ -371,11 +373,20 @@ class MainActivity : AppCompatActivity() {
             val d = LocalDate.parse(dTimes.getString(i))
             dList.add(DailyForecast(d, dMin.getDouble(i), dMax.getDouble(i), dCodes.getInt(i)))
         }
-        val uvMaxToday = if (dUvMax.length() > 0) dUvMax.getDouble(0) else 0.0
+        val today = LocalDate.now()
+        var peakVal = -1.0
+        var peakTime: LocalDateTime? = null
+        for (i in 0 until hTimes.length()) {
+            val t = LocalDateTime.parse(hTimes.getString(i))
+            if (t.toLocalDate() == today) {
+                val v = hUv.optDouble(i, 0.0)
+                if (v > peakVal) { peakVal = v; peakTime = t }
+            }
+        }
+        val uvMaxToday = if (peakVal >= 0) peakVal else if (dUvMax.length() > 0) dUvMax.getDouble(0) else 0.0
 
-        return WeatherResult(currentTemp to currentCode, hList, dList, uvNow, uvMaxToday)
+        return WeatherResult(currentTemp to currentCode, hList, dList, uvNow, uvMaxToday, peakTime)
     }
-
 
     private fun uvCategory(v: Double): Pair<String, Int> {
         val resId = when {
