@@ -11,8 +11,8 @@ android {
         applicationId = "com.valerie.meteoquote"
         minSdk = 24
         targetSdk = 35
-        versionCode = 9
-        versionName = "6"
+        versionCode = 10
+        versionName = "6.1"
     }
 
     buildTypes {

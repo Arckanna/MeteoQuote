@@ -47,7 +47,9 @@ import android.content.Intent
 import android.net.Uri
 import android.view.View
 import android.content.res.ColorStateList
+import android.util.Log
 import androidx.core.view.updateLayoutParams
+import java.net.HttpURLConnection
 
 
 data class City(val label: String, val lat: Double, val lon: Double)
@@ -67,7 +69,7 @@ class MainActivity : AppCompatActivity() {
 
     // Villes par défaut
     private val defaultCities = listOf(
-        City("Camburat", 44.6433, 1.9975),
+
         City("Montpellier", 43.6119, 3.8772),
         City("Orléans", 47.9025, 1.9090),
         City("Saints-en-Puisaye", 47.6231, 3.2606),
@@ -172,23 +174,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button?>(R.id.btnLocate)?.setOnClickListener {
-            Toast.makeText(this, "📍 Clic ‘Ma position’", Toast.LENGTH_SHORT).show()
-
-            val hasCoarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-            val hasFine   = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-
-            if (hasCoarse || hasFine) {
-                locateAndSelectCity()
-            } else {
-                Toast.makeText(this, "Demande de permission localisation…", Toast.LENGTH_SHORT).show()
-                locationPermsLauncher.launch(arrayOf(
-                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ))
-            }
-        } ?: run {
-            Toast.makeText(this, "⚠️ Bouton ‘Ma position’ introuvable dans ce layout", Toast.LENGTH_LONG).show()
+            // ici tu gardes ton check/ask de permissions comme tu l’as déjà
+            locateAndSelectCity() // ⬅️ appellera la suite et mettra à jour le spinner + météo
         }
+
 
         // Recherche & ajout de ville
         val etCitySearch: EditText = findViewById(R.id.etCitySearch)
@@ -451,24 +440,50 @@ class MainActivity : AppCompatActivity() {
 
     /** Reverse geocoding Open-Meteo : (lat, lon) -> City(label) */
     private fun reverseGeocode(lat: Double, lon: Double): City? {
-        val url = "https://geocoding-api.open-meteo.com/v1/reverse?latitude=$lat&longitude=$lon&language=fr&format=json"
-        val body = URL(url).openStream().bufferedReader().use { it.readText() }
-        val results = JSONObject(body).optJSONArray("results") ?: return null
-        if (results.length() == 0) return null
-        val first = results.getJSONObject(0)
+        val url = URL(
+            "https://geocoding-api.open-meteo.com/v1/reverse" +
+                    "?latitude=$lat&longitude=$lon&language=fr"
+        )
 
-        val nm = first.optString("name", "Ma position")
-        val admin1 = first.optString("admin1", "")
-        val country = first.optString("country_code", "")
-        val label = when {
-            admin1.isNotEmpty() && country.isNotEmpty() -> "$nm, $admin1 ($country)"
-            country.isNotEmpty() -> "$nm ($country)"
-            else -> nm
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                requestMethod = "GET"
+            }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val body = stream.bufferedReader().use { it.readText() }
+
+            if (code !in 200..299) {
+                Log.w("MeteoQuote", "reverseGeocode HTTP $code: $body")
+                null
+            } else {
+                val results = JSONObject(body).optJSONArray("results") ?: return null
+                if (results.length() == 0) return null
+                val first = results.getJSONObject(0)
+
+                val nm = first.optString("name", "Ma position")
+                val admin1 = first.optString("admin1", "")
+                val country = first.optString("country_code", "")
+                val label = when {
+                    admin1.isNotEmpty() && country.isNotEmpty() -> "$nm, $admin1 ($country)"
+                    country.isNotEmpty() -> "$nm ($country)"
+                    else -> nm
+                }
+                val la = first.optDouble("latitude", lat)
+                val lo = first.optDouble("longitude", lon)
+                City(label, la, lo)
+            }
+        } catch (e: Exception) {
+            Log.e("MeteoQuote", "reverseGeocode error", e)
+            null
+        } finally {
+            conn?.disconnect()
         }
-        val la = first.optDouble("latitude", lat)
-        val lo = first.optDouble("longitude", lon)
-        return City(label, la, lo)
     }
+
 
 
     // ---- Libellés & icônes ----
@@ -809,63 +824,123 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Impossible d’ouvrir le formulaire.", Toast.LENGTH_LONG).show()
         }
     }
-
     private fun locateAndSelectCity() {
+        // désactive le bouton pour éviter les doubles clics
+        findViewById<Button?>(R.id.btnLocate)?.isEnabled = false
+
         val cts = CancellationTokenSource()
         try {
-            Toast.makeText(this, "⏳ Lecture position (GPS/Wi-Fi)…", Toast.LENGTH_SHORT).show()
-
-            // 1) Tentative haute précision (si l’utilisateur n’a autorisé que Approximate, Play Services basculera ce qu’il peut)
             fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
                 .addOnSuccessListener { loc ->
-                    if (isFinishing || isDestroyed) return@addOnSuccessListener
                     if (loc != null) {
-                        Toast.makeText(this, "✅ Position: ${"%.4f".format(loc.latitude)}, ${"%.4f".format(loc.longitude)}", Toast.LENGTH_SHORT).show()
-                        onLocationReady(loc.latitude, loc.longitude)
+                        applyLocation(loc.latitude, loc.longitude)
                     } else {
-                        Toast.makeText(this, "ℹ️ Position ‘courante’ nulle, on tente la dernière connue…", Toast.LENGTH_SHORT).show()
-                        // 2) Fallback : dernière position connue
+                        // fallback: dernière position connue
                         fused.lastLocation
                             .addOnSuccessListener { last ->
-                                if (last != null) {
-                                    Toast.makeText(this, "✅ Dernière position: ${"%.4f".format(last.latitude)}, ${"%.4f".format(last.longitude)}", Toast.LENGTH_SHORT).show()
-                                    onLocationReady(last.latitude, last.longitude)
-                                } else {
-                                    Toast.makeText(this, "❌ Aucune position disponible. Vérifie que la localisation est activée.", Toast.LENGTH_LONG).show()
-                                }
+                                if (last != null) applyLocation(last.latitude, last.longitude)
+                                else Toast.makeText(this, "Position indisponible.", Toast.LENGTH_SHORT).show()
                             }
                             .addOnFailureListener {
-                                Toast.makeText(this, "❌ Erreur ‘dernière position’.", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this, "Erreur position (fallback).", Toast.LENGTH_SHORT).show()
                             }
+                            .addOnCompleteListener { findViewById<Button?>(R.id.btnLocate)?.isEnabled = true }
+                        return@addOnSuccessListener
                     }
                 }
                 .addOnFailureListener {
-                    Toast.makeText(this, "❌ Erreur ‘position courante’.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Erreur position.", Toast.LENGTH_SHORT).show()
                 }
+                .addOnCompleteListener { findViewById<Button?>(R.id.btnLocate)?.isEnabled = true }
         } catch (_: SecurityException) {
-            Toast.makeText(this, "Permission localisation requise.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Permission localisation requise.", Toast.LENGTH_SHORT).show()
+            findViewById<Button?>(R.id.btnLocate)?.isEnabled = true
         } catch (_: Exception) {
-            Toast.makeText(this, "Localisation indisponible.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Localisation indisponible.", Toast.LENGTH_SHORT).show()
+            findViewById<Button?>(R.id.btnLocate)?.isEnabled = true
         }
     }
+
+    private fun applyLocation(lat: Double, lon: Double) {
+        ioScope.launch {
+            val detected = try {
+                reverseGeocode(lat, lon)
+            } catch (e: Exception) {
+                Log.e("MeteoQuote", "applyLocation/reverse failed", e)
+                null
+            } ?: City("Ma position", lat, lon)
+
+            withContext(Dispatchers.Main) {
+                selectOrInsertCity(detected)  // met le Spinner sur la bonne ville
+                refresh()                     // recharge la météo pour cette ville
+                Toast.makeText(this@MainActivity, "Ville détectée : ${detected.label}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+
+    /** Met à jour le spinner/liste villes :
+     * - si la ville existe déjà (même label) → on met à jour ses coords et on la sélectionne
+     * - sinon → on l’insère en tête et on sélectionne 0
+     * Puis on persiste. */
+    private fun selectOrInsertCity(city: City) {
+        // 1) cherche si le label existe déjà dans l'adapter
+        val count = cityNamesAdapter.count
+        var pos = -1
+        for (i in 0 until count) {
+            val lbl = cityNamesAdapter.getItem(i) ?: continue
+            if (lbl.equals(city.label, ignoreCase = true)) { pos = i; break }
+        }
+
+        if (pos >= 0) {
+            // Met à jour les coords dans la liste 'cities'
+            val idx = cities.indexOfFirst { it.label.equals(city.label, ignoreCase = true) }
+            if (idx >= 0) cities[idx] = city.copy(label = cities[idx].label) // garde le même label
+            spinner.setSelection(pos, true)
+        } else {
+            // Insère en tête dans la liste ET dans l'adapter
+            cities.add(0, city)
+            cityNamesAdapter.insert(city.label, 0)
+            spinner.setSelection(0, true)
+        }
+
+        saveCities()
+    }
+
 
 
     private fun onLocationReady(lat: Double, lon: Double) {
         ioScope.launch {
-            val city = reverseGeocode(lat, lon) ?: City("Ma position", lat, lon)
+            val detected = reverseGeocode(lat, lon) ?: City("Ma position", lat, lon)
             withContext(Dispatchers.Main) {
-                val exists = cities.any { it.label.equals(city.label, ignoreCase = true) }
-                if (!exists) {
-                    cities.add(0, city)
-                    cityNamesAdapter.insert(city.label, 0)
+                // 1) Cherche la position de la ville dans l'adapter (ignore case)
+                val count = cityNamesAdapter.count
+                var pos = -1
+                for (i in 0 until count) {
+                    val lbl = cityNamesAdapter.getItem(i) ?: continue
+                    if (lbl.equals(detected.label, ignoreCase = true)) { pos = i; break }
                 }
-                spinner.setSelection(0)
+
+                if (pos >= 0) {
+                    val existing = cities.removeAt(cities.indexOfFirst { it.label.equals(detected.label, ignoreCase = true) })
+                    cities.add(0, detected.copy(label = existing.label)) // garde le même label
+                    cityNamesAdapter.remove(existing.label)
+                    cityNamesAdapter.insert(existing.label, 0)
+                    spinner.setSelection(0, true)
+                } else {
+                    // 4) Nouvelle ville → insère en tête dans les deux listes
+                    cities.add(0, detected)
+                    cityNamesAdapter.insert(detected.label, 0)
+                    spinner.setSelection(0, true)
+                }
+
                 saveCities()
                 refresh()
-                Toast.makeText(this@MainActivity, "Ville détectée : ${city.label}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Ville détectée : ${detected.label}", Toast.LENGTH_SHORT).show()
             }
         }
     }
+
 
 
     override fun onDestroy() {
