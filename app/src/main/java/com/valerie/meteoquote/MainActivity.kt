@@ -1,5 +1,4 @@
 package com.valerie.meteoquote
-
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.Manifest
@@ -8,7 +7,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
-
 import android.os.Build
 import android.content.Context
 import android.os.Bundle
@@ -105,6 +103,15 @@ class MainActivity : AppCompatActivity() {
     private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+
+    private val locationPermsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { perms ->
+        val granted = (perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true) ||
+                (perms[Manifest.permission.ACCESS_FINE_LOCATION] == true)
+        if (granted) locateAndSelectCity()
+        else Toast.makeText(this, "Autorise la localisation pour utiliser « Ma position ».", Toast.LENGTH_SHORT).show()
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -124,7 +131,6 @@ class MainActivity : AppCompatActivity() {
         btnRefresh = findViewById(R.id.btnRefresh)
         containerHourly = findViewById(R.id.containerHourly)
         containerDaily = findViewById(R.id.containerDaily)
-
 
         // Sur API 35+, la status bar est transparente : on laisse le BACKGROUND passer sous la barre
         // et on décale le contenu via les insets pour éviter le chevauchement.
@@ -164,12 +170,25 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button?>(R.id.btnFeedback)?.setOnClickListener {
             openFeedbackForm()
         }
-        findViewById<Button>(R.id.btnLocate).setOnClickListener {
-            val granted = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-            if (granted) locateAndSelectCity() else coarsePermLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        findViewById<Button?>(R.id.btnLocate)?.setOnClickListener {
+            Toast.makeText(this, "📍 Clic ‘Ma position’", Toast.LENGTH_SHORT).show()
+
+            val hasCoarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            val hasFine   = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+            if (hasCoarse || hasFine) {
+                locateAndSelectCity()
+            } else {
+                Toast.makeText(this, "Demande de permission localisation…", Toast.LENGTH_SHORT).show()
+                locationPermsLauncher.launch(arrayOf(
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ))
+            }
+        } ?: run {
+            Toast.makeText(this, "⚠️ Bouton ‘Ma position’ introuvable dans ce layout", Toast.LENGTH_LONG).show()
         }
-
-
 
         // Recherche & ajout de ville
         val etCitySearch: EditText = findViewById(R.id.etCitySearch)
@@ -792,40 +811,52 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun locateAndSelectCity() {
-        // 1) Essaye une position courante “one-shot”
         val cts = CancellationTokenSource()
         try {
-            fused.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, cts.token)
+            Toast.makeText(this, "⏳ Lecture position (GPS/Wi-Fi)…", Toast.LENGTH_SHORT).show()
+
+            // 1) Tentative haute précision (si l’utilisateur n’a autorisé que Approximate, Play Services basculera ce qu’il peut)
+            fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
                 .addOnSuccessListener { loc ->
+                    if (isFinishing || isDestroyed) return@addOnSuccessListener
                     if (loc != null) {
+                        Toast.makeText(this, "✅ Position: ${"%.4f".format(loc.latitude)}, ${"%.4f".format(loc.longitude)}", Toast.LENGTH_SHORT).show()
                         onLocationReady(loc.latitude, loc.longitude)
                     } else {
-                        // 2) Fallback: dernière position connue
-                        fused.lastLocation.addOnSuccessListener { last ->
-                            if (last != null) onLocationReady(last.latitude, last.longitude)
-                            else Toast.makeText(this, "Position indisponible. Active la localisation.", Toast.LENGTH_SHORT).show()
-                        }.addOnFailureListener {
-                            Toast.makeText(this, "Impossible d’obtenir la position.", Toast.LENGTH_SHORT).show()
-                        }
+                        Toast.makeText(this, "ℹ️ Position ‘courante’ nulle, on tente la dernière connue…", Toast.LENGTH_SHORT).show()
+                        // 2) Fallback : dernière position connue
+                        fused.lastLocation
+                            .addOnSuccessListener { last ->
+                                if (last != null) {
+                                    Toast.makeText(this, "✅ Dernière position: ${"%.4f".format(last.latitude)}, ${"%.4f".format(last.longitude)}", Toast.LENGTH_SHORT).show()
+                                    onLocationReady(last.latitude, last.longitude)
+                                } else {
+                                    Toast.makeText(this, "❌ Aucune position disponible. Vérifie que la localisation est activée.", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            .addOnFailureListener {
+                                Toast.makeText(this, "❌ Erreur ‘dernière position’.", Toast.LENGTH_LONG).show()
+                            }
                     }
                 }
                 .addOnFailureListener {
-                    Toast.makeText(this, "Erreur de localisation.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "❌ Erreur ‘position courante’.", Toast.LENGTH_LONG).show()
                 }
         } catch (_: SecurityException) {
-            Toast.makeText(this, "Permission localisation requise.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Permission localisation requise.", Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {
+            Toast.makeText(this, "Localisation indisponible.", Toast.LENGTH_LONG).show()
         }
     }
 
+
     private fun onLocationReady(lat: Double, lon: Double) {
-        // Reverse géocodage (Open-Meteo) puis sélection/ajout dans la liste
         ioScope.launch {
             val city = reverseGeocode(lat, lon) ?: City("Ma position", lat, lon)
             withContext(Dispatchers.Main) {
-                // évite doublon par libellé
                 val exists = cities.any { it.label.equals(city.label, ignoreCase = true) }
                 if (!exists) {
-                    cities.add(0, city) // tout en haut
+                    cities.add(0, city)
                     cityNamesAdapter.insert(city.label, 0)
                 }
                 spinner.setSelection(0)
@@ -835,6 +866,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
 
     override fun onDestroy() {
         super.onDestroy()
