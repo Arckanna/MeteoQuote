@@ -8,10 +8,19 @@
     <color name="status_snow">#E6F3FF</color>
     <color name="status_fog">#D5DAE0</color>
     <color name="status_thunder">#818CF8</color>
+    <!-- Couleur UV -->
     <color name="uv_low">#2ECC71</color>       <!-- vert -->
     <color name="uv_mod">#F1C40F</color>       <!-- jaune -->
     <color name="uv_high">#E67E22</color>      <!-- orange -->
     <color name="uv_veryhigh">#E74C3C</color>  <!-- rouge -->
     <color name="uv_extreme">#8E44AD</color>   <!-- violet -->
+    <!-- Couleur qualite de l'air-->
+    <color name="aqi_good">#2ECC71</color>
+    <color name="aqi_fair">#F1C40F</color>
+    <color name="aqi_mod">#E67E22</color>
+    <color name="aqi_poor">#E74C3C</color>
+    <color name="aqi_vpoor">#8E44AD</color>
+    <color name="aqi_epoor">#6F1E51</color>
+
 
 </resources>
