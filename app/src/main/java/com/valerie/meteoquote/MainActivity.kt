@@ -87,7 +87,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var containerHourly: LinearLayout
     private lateinit var containerDaily: LinearLayout
     private lateinit var tvTemp: TextView
-    private lateinit var tvUpdated: TextView
+
     private lateinit var tvQuote: TextView
     private lateinit var cityNamesAdapter: ArrayAdapter<String>
     private lateinit var rootContainer: ViewGroup
@@ -225,7 +225,6 @@ class MainActivity : AppCompatActivity() {
         // État d'attente
         tvCondition.text = "Chargement…"
         tvTemp.text = "— °C"
-        tvUpdated.visibility = View.GONE   // garde caché en permanence
 
         ioScope.launch {
             try {
@@ -237,7 +236,7 @@ class MainActivity : AppCompatActivity() {
                     ivIcon.setImageResource(wmoToIconRes(code))
                     tvCondition.text = label
                     tvTemp.text = String.format("%.1f °C", temp)
-                    tvUpdated.text = "Maj: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+
 
                     applyWeatherTheme(code)
                     val light = isBgLight(code)
@@ -782,7 +781,7 @@ class MainActivity : AppCompatActivity() {
         tvCondition.setTextColor(primary)
         tvTemp.setTextColor(primary)
         tvQuote.setTextColor(primary)
-        tvUpdated.setTextColor(secondary)
+       
 
         findViewById<TextView?>(R.id.tvAppTitle)?.setTextColor(primary)
         findViewById<TextView?>(R.id.tvHourlyTitle)?.setTextColor(secondary)
