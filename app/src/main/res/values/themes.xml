@@ -1,9 +1,13 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+    <!-- Thème clair uniquement -->
     <style name="Base.Theme.MeteoQuote" parent="Theme.Material3.Light.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
-
+        <!-- Palette (exemple simple et lisible) -->
+        <item name="colorPrimary">#2196F3</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#1565C0</item>
+        <item name="android:textColorPrimary">#111111</item>
+        <item name="android:textColorSecondary">#5E5E5E</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
     <style name="Theme.MeteoQuote" parent="Base.Theme.MeteoQuote" />
