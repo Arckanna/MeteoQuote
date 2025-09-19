@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <LinearLayout
         android:id="@+id/rootContainer"
@@ -10,15 +11,15 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
+        <!-- Titre de l’appli -->
         <TextView
             android:id="@+id/tvAppTitle"
+            style="@style/TextTitleLarge"
             android:text="@string/title_meteo_citation"
-            android:textStyle="bold"
-            android:textSize="20sp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
-        <!-- Barre de recherche de ville -->
+        <!-- Barre de recherche : EditText + Ma position + Ajouter -->
         <LinearLayout
             android:orientation="horizontal"
             android:layout_width="match_parent"
@@ -27,48 +28,56 @@
 
             <EditText
                 android:id="@+id/etCitySearch"
+                style="@style/TextBody"
                 android:hint="Rechercher une ville"
                 android:inputType="textCapWords"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"/>
+                android:layout_weight="1" />
+
+
 
             <Button
                 android:id="@+id/btnAddCity"
+                style="@style/WidgetButtonMain"
                 android:text="Ajouter"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" />
+
+        </LinearLayout>
+        <!-- Liste des villes -->
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp">
+
+            <Spinner
+                android:id="@+id/spinnerCities"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/btnLocate"
+                style="@style/WidgetButtonMain"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="📍"
+                android:contentDescription="Ma position"
                 android:layout_marginStart="8dp"/>
         </LinearLayout>
 
-        <Spinner
-            android:id="@+id/spinnerCities"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp" />
-        <Button
-            android:id="@+id/btnLocate"
-            android:text="📍 Ma position"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" />
-        <TextView
-            android:id="@+id/tvUpdated"
-            android:visibility="gone"
-            android:text=""
-            android:textSize="12sp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp" />
-        <!-- ===== Bloc météo remodelé ===== -->
+        <!-- Bloc météo principal -->
         <LinearLayout
             android:id="@+id/weatherBlock"
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="16dp">
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="24dp">
 
             <!-- Colonne gauche : Icône + condition -->
             <LinearLayout
@@ -78,20 +87,19 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1">
 
-                <!-- Icône météo -->
                 <ImageView
                     android:id="@+id/ivIcon"
                     android:layout_width="96dp"
                     android:layout_height="96dp"
-                    android:contentDescription="@string/app_name"
-                    android:layout_marginBottom="6dp" />
+                    android:layout_marginBottom="6dp"
+                    android:contentDescription="@string/app_name" />
 
                 <TextView
                     android:id="@+id/tvCondition"
+                    style="@style/TextBody"
                     android:text="—"
-                    android:textSize="18sp"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"/>
+                    android:layout_height="wrap_content" />
             </LinearLayout>
 
             <!-- Température à droite -->
@@ -100,47 +108,54 @@
                 android:text="— °C"
                 android:textSize="48sp"
                 android:textStyle="bold"
+                android:textColor="#111111"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"/>
+                android:layout_height="wrap_content" />
         </LinearLayout>
-        <!-- Indice UV -->
-        <TextView
-            android:id="@+id/tvUv"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingLeft="12dp"
-            android:paddingRight="12dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:text="UV —"
-            android:textStyle="bold"
-            android:textColor="@android:color/white"
-            android:background="@drawable/bg_uv_chip"
-            android:layout_marginTop="16dp"
-            />
-        <!-- Qualite de l'air -->
-        <TextView
-            android:id="@+id/tvAqi"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:paddingLeft="12dp"
-            android:paddingRight="12dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:text="AQI —"
-            android:textStyle="bold"
-            android:textColor="@android:color/white"
-            android:background="@drawable/bg_uv_chip" />
 
-        <!-- ===== Prévisions : Aujourd'hui + 24 h ===== -->
-        <TextView
-            android:id="@+id/tvHourlyTitle"
-            android:text="Aujourd'hui + 24 h"
-            android:textStyle="bold"
+        <!-- Chips UV & AQI : UV à gauche, AQI à droite, 2 lignes chacune, alignées -->
+        <!-- Chips UV & AQI : alignement robuste avec ConstraintLayout -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/containerChips"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="16dp">
+
+            <TextView
+                android:id="@+id/tvUv"
+                style="@style/WidgetChipPill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="true"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            android:text="UV —" />
+
+            <TextView
+                android:id="@+id/tvAqi"
+                style="@style/WidgetChipPill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="true"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                android:text="AQI —" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+
+
+
+        <!-- Aujourd’hui + 24 h -->
+        <TextView
+            android:id="@+id/tvHourlyTitle"
+            style="@style/TextSectionTitle"
+            android:text="Aujourd'hui + 24 h"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp" />
 
         <HorizontalScrollView
             android:layout_width="match_parent"
@@ -157,14 +172,14 @@
                 android:paddingBottom="8dp" />
         </HorizontalScrollView>
 
-        <!-- ===== Prévisions : 7 jours ===== -->
+        <!-- 7 jours -->
         <TextView
             android:id="@+id/tvDailyTitle"
+            style="@style/TextSectionTitle"
             android:text="7 jours"
-            android:textStyle="bold"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="20dp" />
 
         <LinearLayout
             android:id="@+id/containerDaily"
@@ -177,40 +192,51 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="20dp"
             android:background="?android:attr/listDivider" />
 
+        <!-- Citation -->
         <TextView
             android:id="@+id/tvQuoteTitle"
+            style="@style/TextSectionTitle"
             android:text="Citation du jour"
-            android:textStyle="bold"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="20dp" />
 
         <TextView
             android:id="@+id/tvQuote"
             android:text="—"
             android:textSize="20sp"
             android:textStyle="italic"
+            android:textColor="#111111"
             android:lineSpacingExtra="4dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp" />
 
-        <Button
-            android:id="@+id/btnNewQuote"
-            android:text="Nouvelle citation"
+        <!-- Actions -->
+        <LinearLayout
+            android:orientation="horizontal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"/>
-        <Button
-            android:id="@+id/btnFeedback"
-            android:text="Envoyer un retour"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"/>
+            android:layout_marginTop="12dp">
 
+            <Button
+                android:id="@+id/btnNewQuote"
+                style="@style/WidgetButtonMain"
+                android:text="Nouvelle citation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+
+            <Button
+                android:id="@+id/btnFeedback"
+                style="@style/WidgetButtonMain"
+                android:text="Envoyer un retour"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"/>
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>

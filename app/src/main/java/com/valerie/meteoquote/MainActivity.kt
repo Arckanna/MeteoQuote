@@ -138,7 +138,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         tvUv = findViewById(R.id.tvUv)
-        tvUv?.updateLayoutParams<LinearLayout.LayoutParams> { topMargin = dp(16) }
+        //tvUv?.updateLayoutParams<LinearLayout.LayoutParams> { topMargin = dp(16) }
 
         rootContainer = findViewById(R.id.rootContainer)
         spinner = findViewById(R.id.spinnerCities)

@@ -1,0 +1,5 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="18dp"/>
+    <!-- Couleur par défaut (sera overridée par backgroundTint côté code) -->
+    <solid android:color="#9E9E9E"/>
+</shape>
