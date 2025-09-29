@@ -58,8 +58,6 @@ import android.text.Spanned
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.graphics.Typeface
-import kotlin.math.roundToInt
-
 
 data class City(val label: String, val lat: Double, val lon: Double)
 data class HourlyForecast(val time: LocalDateTime, val temp: Double, val code: Int)
@@ -73,24 +71,15 @@ data class WeatherResult(
     val uvMaxToday: Double,
     val uvPeakTime: LocalDateTime?,
     val aqiNow: Int,
-    val aqiMaxToday: Int
+    val aqiMaxToday: Int,
+    val aqiPeakTime: LocalDateTime?
 )
 
 class MainActivity : AppCompatActivity() {
-
-    // Villes par défaut
     private val defaultCities = listOf(
-        City("Montpellier", 43.6119, 3.8772),
-        City("Orléans", 47.9025, 1.9090),
-        City("Saints-en-Puisaye", 47.6231, 3.2606),
-        City("Paris", 48.8566, 2.3522),
-        City("Lyon", 45.7640, 4.8357),
-        City("Marseille", 43.2965, 5.3698),
-        City("Toulouse", 43.6047, 1.4442),
-        City("Bordeaux", 44.8378, -0.5792)
+        City("Toulouse", 43.6047, 1.4442)
     )
 
-    // Liste mutable utilisée par l’app (sera chargée depuis prefs)
     private val cities = mutableListOf<City>()
     private lateinit var spinner: Spinner
     private lateinit var ivIcon: ImageView
@@ -106,7 +95,6 @@ class MainActivity : AppCompatActivity() {
     private var currentThemeRes: Int? = null
     private var currentStatusColor: Int? = null
     private var lastWeatherCode: Int? = null
-
     private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var suppressNextRefresh = true
@@ -118,10 +106,8 @@ class MainActivity : AppCompatActivity() {
         val granted = (perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true) ||
                 (perms[Manifest.permission.ACCESS_FINE_LOCATION] == true)
         if (granted) {
-            // Permission accordée → on peut localiser (si le clic venait de "Ma position")
             locateAndSelectCity()
         } else {
-            // Si "Ne plus demander" est coché, propose d’ouvrir Réglages
             val showRationaleFine = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
             val showRationaleCoarse = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)
             if (!showRationaleFine && !showRationaleCoarse) {
@@ -142,8 +128,6 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         tvUv = findViewById(R.id.tvUv)
-        //tvUv?.updateLayoutParams<LinearLayout.LayoutParams> { topMargin = dp(16) }
-
         rootContainer = findViewById(R.id.rootContainer)
         spinner = findViewById(R.id.spinnerCities)
         ivIcon = findViewById(R.id.ivIcon)
@@ -154,20 +138,16 @@ class MainActivity : AppCompatActivity() {
         containerHourly = findViewById(R.id.containerHourly)
         containerDaily = findViewById(R.id.containerDaily)
 
-        // Sur API 35+, la status bar est transparente : on laisse le BACKGROUND passer sous la barre
-        // et on décale le contenu via les insets pour éviter le chevauchement.
         ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { v, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(v.paddingLeft, sys.top, v.paddingRight, sys.bottom)
             insets
         }
 
-        // Charger les villes (prefs) ou utiliser la liste par défaut
         val saved = loadCities()
         cities.clear()
         cities.addAll(if (saved.isNotEmpty()) saved else defaultCities)
 
-        // Adapter
         cityNamesAdapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_dropdown_item,
@@ -178,12 +158,11 @@ class MainActivity : AppCompatActivity() {
         spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>, view: android.view.View?, position: Int, id: Long) {
                 if (suppressNextRefresh) { suppressNextRefresh = false; return }
-                refresh() // recharge météo/UV/AQI pour la ville choisie
+                refresh()
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>) {}
         }
 
-        // Bouton "Nouvelle citation"
         val btnNewQuote: Button = findViewById(R.id.btnNewQuote)
         btnNewQuote.setOnClickListener {
             val code = lastWeatherCode
@@ -194,15 +173,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Bouton "Envoyer un retour" → Google Form prérempli
         findViewById<Button?>(R.id.btnFeedback)?.setOnClickListener { openFeedbackForm() }
 
-        // Bouton "📍 Ma position" → demande (si besoin) puis géolocalise
         findViewById<Button?>(R.id.btnLocate)?.setOnClickListener {
             ensureLocationPermission { locateAndSelectCity() }
         }
 
-        // Recherche & ajout de ville
         val etCitySearch: EditText = findViewById(R.id.etCitySearch)
         val btnAddCity: Button = findViewById(R.id.btnAddCity)
         btnAddCity.setOnClickListener {
@@ -233,11 +209,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Premier chargement
         refresh()
 
-        // Demande "à froid" la permission au premier lancement (sans auto-localiser derrière)
-        // → si tu veux auto-localiser après accord, remplace {} par ::locateAndSelectCity
         rootContainer.post { ensureLocationPermission { } }
     }
 
@@ -284,11 +257,14 @@ class MainActivity : AppCompatActivity() {
                         visibility = View.VISIBLE
                     }
 
-                    // AQI (now only)
+                    // AQI (now + pic heure)
                     val (aqiLabel, aqiColor) = aqiCategoryEU(result.aqiNow)
                     tvAqi?.let { aqi ->
                         aqi.setBackgroundResource(R.drawable.bg_uv_chip)
-                        val aqiTop = "AQI ${result.aqiNow}"
+                        val aqiPeakTxt = result.aqiPeakTime
+                            ?.format(DateTimeFormatter.ofPattern("HH:mm"))
+                            ?: "—"
+                        val aqiTop = "AQI ${result.aqiNow} • pic ${result.aqiMaxToday} à $aqiPeakTxt"
                         val aqiBottom = "Qualité de l’air\u202F: ${aqiLabel.lowercase(Locale.FRENCH)}"
                         tvAqi?.text = boldLine1SmallLine2(aqiTop, aqiBottom)
                         ViewCompat.setBackgroundTintList(aqi, ColorStateList.valueOf(aqiColor))
@@ -317,7 +293,7 @@ class MainActivity : AppCompatActivity() {
             .append(top, StyleSpan(Typeface.BOLD), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             .append("\n")
             .append(bottom, RelativeSizeSpan(0.92f), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-    // ---- Thème météo ----
+
     private fun themeDrawableRes(code: Int): Int = when (code) {
         0 -> R.drawable.bg_weather_clear
         1, 2, 3 -> R.drawable.bg_weather_clouds
@@ -366,7 +342,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---- Récupération météo ----
+
     private fun fetchFullWeather(lat: Double, lon: Double): WeatherResult {
         val url = "https://api.open-meteo.com/v1/forecast" +
                 "?latitude=$lat&longitude=$lon" +
@@ -445,15 +421,21 @@ class MainActivity : AppCompatActivity() {
         var aqiNow = 0
         var aqiMaxToday = 0
         var tookNow = false
+        var aqiPeakTime: LocalDateTime? = null
         for (i in 0 until aTimes.length()) {
             val t = LocalDateTime.parse(aTimes.getString(i))
             val v = aVals.optInt(i, 0)
             if (!t.isBefore(now) && !tookNow) { aqiNow = v; tookNow = true }
-            if (t.toLocalDate() == today && v > aqiMaxToday) aqiMaxToday = v
+            if (t.toLocalDate() == today && v > aqiMaxToday) {
+                aqiMaxToday = v
+                aqiPeakTime = t
+            }
         }
         if (!tookNow && aVals.length() > 0) aqiNow = aVals.optInt(0, 0)
+        if (aqiMaxToday < 0) aqiMaxToday = aVals.optInt(0, 0)
 
-        return WeatherResult(currentTemp to currentCode, hList, dList, uvNow, uvMaxToday, peakTime, aqiNow, aqiMaxToday)
+        return WeatherResult(currentTemp to currentCode, hList, dList, uvNow, uvMaxToday, peakTime, aqiNow, aqiMaxToday,
+            aqiPeakTime   )
     }
 
     private fun aqiCategoryEU(v: Int): Pair<String, Int> {
@@ -494,7 +476,6 @@ class MainActivity : AppCompatActivity() {
         return label to ContextCompat.getColor(this, resId)
     }
 
-    /** Géocodage Open-Meteo : nom de ville → (lat, lon) */
     private fun geocodeCity(name: String): City? {
         val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
         val url =
@@ -518,20 +499,14 @@ class MainActivity : AppCompatActivity() {
         return City(label, lat, lon)
     }
 
-    /** Reverse geocoding Open-Meteo : (lat, lon) -> City(label) */
-    /** Essaie 1) Open-Meteo reverse, 2) Nominatim (OSM), 3) Geocoder Android. */
     private fun reverseGeocode(lat: Double, lon: Double): City? {
-        // 1) Open-Meteo (reverse)
         runCatching { reverseOpenMeteo(lat, lon) }.getOrNull()?.let { if (it != null) return it }
 
-        // 2) Nominatim / OpenStreetMap (nécessite un User-Agent explicite)
         runCatching { reverseNominatim(lat, lon) }.getOrNull()?.let { if (it != null) return it }
 
-        // 3) Android Geocoder (si dispo sur l’appareil)
         return runCatching { reverseAndroidGeocoder(lat, lon) }.getOrNull()
     }
 
-    /** Reverse via Open-Meteo. */
     private fun reverseOpenMeteo(lat: Double, lon: Double): City? {
         val url = URL(
             "https://geocoding-api.open-meteo.com/v1/reverse" +
@@ -572,7 +547,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Reverse via Nominatim (OSM). Respecter un User-Agent, faible volumétrie côté app = ok. */
     private fun reverseNominatim(lat: Double, lon: Double): City? {
         val url = URL(
             "https://nominatim.openstreetmap.org/reverse" +
@@ -616,7 +590,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Reverse via Android Geocoder (si dispo) — moins fiable mais pratique en dernier recours. */
     private fun reverseAndroidGeocoder(lat: Double, lon: Double): City? {
         if (!Geocoder.isPresent()) return null
         return try {
@@ -635,7 +608,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Compose un libellé “ville, région (CC)” selon ce qu’on a. */
     private fun buildLabel(
         city: String?,
         town: String?,
@@ -664,8 +636,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-    // ---- Libellés & icônes ----
     private fun wmoToLabel(code: Int): String = when (code) {
         0 -> "Ciel clair"
         1, 2, 3 -> "Plutôt nuageux"
@@ -688,7 +658,7 @@ class MainActivity : AppCompatActivity() {
         else -> R.drawable.ic_weather_cloudy_color
     }
 
-    // ---- Citations ----
+
     private fun prefs() = getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE)
     private fun bucketName(code: Int): String = when (code) {
         0 -> "clear"
@@ -754,43 +724,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---- Bouton "Envoyer un retour" ----
-    private fun sendFeedbackEmail(isBeta: Boolean) {
-        val address = if (isBeta) "ivray3dlabs+beta@gmail.com" else "ivray3dlabs+support@gmail.com"
-        val (appId, vName, vCode) = appInfo()
-        val subject = "[Meteo & Citation] Retour testeur V$vName"
-        val body = buildString {
-            appendLine("Merci pour votre retour 🙌")
-            appendLine()
-            appendLine("Décrivez le problème/amélioration :")
-            appendLine("- Étapes pour reproduire :")
-            appendLine("- Comportement attendu :")
-            appendLine("- Capture/vidéo (si possible) :")
-            appendLine()
-            appendLine("---")
-            appendLine("Infos techniques (auto) :")
-            appendLine("App : $appId $vName ($vCode)")
-            appendLine("Android : ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
-            appendLine("Appareil : ${Build.MANUFACTURER} ${Build.MODEL}")
-        }
-
-        val uri = Uri.parse("mailto:$address")
-        val email = Intent(Intent.ACTION_SENDTO, uri).apply {
-            putExtra(Intent.EXTRA_SUBJECT, subject)
-            putExtra(Intent.EXTRA_TEXT, body)
-        }
-        try {
-            startActivity(Intent.createChooser(email, "Envoyer par e-mail"))
-        } catch (_: ActivityNotFoundException) {
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.gm")))
-            } catch (_: Exception) {
-                Toast.makeText(this, "Installe une application e-mail (Gmail, Outlook…)", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    // ---- Persistance villes ----
     private fun saveCities() {
         val arr = JSONArray()
         cities.forEach { c ->
@@ -817,7 +750,7 @@ class MainActivity : AppCompatActivity() {
         return list
     }
 
-    // ---- Rendu UI ----
+
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private fun renderHourly(items: List<HourlyForecast>, useDarkText: Boolean) {
@@ -1089,36 +1022,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         saveCities()
-    }
-
-    private fun onLocationReady(lat: Double, lon: Double) {
-        ioScope.launch {
-            val detected = reverseGeocode(lat, lon) ?: City("Ma position", lat, lon)
-            withContext(Dispatchers.Main) {
-                val count = cityNamesAdapter.count
-                var pos = -1
-                for (i in 0 until count) {
-                    val lbl = cityNamesAdapter.getItem(i) ?: continue
-                    if (lbl.equals(detected.label, ignoreCase = true)) { pos = i; break }
-                }
-
-                if (pos >= 0) {
-                    val existing = cities.removeAt(cities.indexOfFirst { it.label.equals(detected.label, ignoreCase = true) })
-                    cities.add(0, detected.copy(label = existing.label))
-                    cityNamesAdapter.remove(existing.label)
-                    cityNamesAdapter.insert(existing.label, 0)
-                    spinner.setSelection(0, true)
-                } else {
-                    cities.add(0, detected)
-                    cityNamesAdapter.insert(detected.label, 0)
-                    spinner.setSelection(0, true)
-                }
-
-                saveCities()
-                refresh()
-                Toast.makeText(this@MainActivity, "Ville détectée : ${detected.label}", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
 
     override fun onDestroy() {
