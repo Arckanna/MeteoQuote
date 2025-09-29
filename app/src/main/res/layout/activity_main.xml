@@ -64,9 +64,10 @@
                 style="@style/WidgetButtonMain"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:text="📍"
+                android:text="🎯"
                 android:contentDescription="Ma position"
                 android:layout_marginStart="8dp"/>
+
         </LinearLayout>
 
         <!-- Bloc météo principal -->
