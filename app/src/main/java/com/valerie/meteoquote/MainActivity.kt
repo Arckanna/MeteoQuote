@@ -48,13 +48,17 @@ import android.net.Uri
 import android.view.View
 import android.content.res.ColorStateList
 import android.util.Log
-import androidx.core.view.updateLayoutParams
 import java.net.HttpURLConnection
 import androidx.appcompat.app.AlertDialog
 import android.provider.Settings
 import android.location.Geocoder
 import java.io.IOException
-
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
+import android.graphics.Typeface
+import kotlin.math.roundToInt
 
 
 data class City(val label: String, val lat: Double, val lon: Double)
@@ -269,8 +273,12 @@ class MainActivity : AppCompatActivity() {
                     val peakTxt = result.uvPeakTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "—"
                     tvUv?.apply {
                         setBackgroundResource(R.drawable.bg_uv_chip)
-                        text = String.format("UV %.1f • pic %.1f à %s — %s",
-                            result.uvNow, result.uvMaxToday, peakTxt, uvLabel)
+                        val uvTop = String.format(
+                            Locale.FRANCE, "UV %.1f • pic %.1f à %s",
+                            result.uvNow, result.uvMaxToday, peakTxt
+                        )
+                        val uvBottom = "Risque UV\u202F: ${uvLabel.lowercase(Locale.FRENCH)}"
+                        tvUv?.text = boldLine1SmallLine2(uvTop, uvBottom)
                         backgroundTintList = ColorStateList.valueOf(uvColor)
                         setTextColor(Color.WHITE)
                         visibility = View.VISIBLE
@@ -280,7 +288,9 @@ class MainActivity : AppCompatActivity() {
                     val (aqiLabel, aqiColor) = aqiCategoryEU(result.aqiNow)
                     tvAqi?.let { aqi ->
                         aqi.setBackgroundResource(R.drawable.bg_uv_chip)
-                        aqi.text = "AQI ${result.aqiNow} — $aqiLabel"
+                        val aqiTop = "AQI ${result.aqiNow}"
+                        val aqiBottom = "Qualité de l’air\u202F: ${aqiLabel.lowercase(Locale.FRENCH)}"
+                        tvAqi?.text = boldLine1SmallLine2(aqiTop, aqiBottom)
                         ViewCompat.setBackgroundTintList(aqi, ColorStateList.valueOf(aqiColor))
                         aqi.setTextColor(Color.WHITE)
                         aqi.visibility = View.VISIBLE
@@ -302,7 +312,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
+    private fun boldLine1SmallLine2(top: String, bottom: String) =
+        SpannableStringBuilder()
+            .append(top, StyleSpan(Typeface.BOLD), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            .append("\n")
+            .append(bottom, RelativeSizeSpan(0.92f), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     // ---- Thème météo ----
     private fun themeDrawableRes(code: Int): Int = when (code) {
         0 -> R.drawable.bg_weather_clear
