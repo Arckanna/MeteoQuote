@@ -40,9 +40,9 @@ import androidx.core.view.WindowInsetsCompat
 import android.graphics.drawable.TransitionDrawable
 import android.animation.ValueAnimator
 import android.animation.ArgbEvaluator
+import android.annotation.SuppressLint
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.view.View
@@ -91,6 +91,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cityNamesAdapter: ArrayAdapter<String>
     private lateinit var rootContainer: ViewGroup
     private lateinit var tvAqi: TextView
+    private lateinit var containerRecentChips: LinearLayout
+    private val recentCities = mutableListOf<City>()  // LRU (max 10)
+
     private var tvUv: TextView? = null
     private var currentThemeRes: Int? = null
     private var currentStatusColor: Int? = null
@@ -126,6 +129,17 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        containerRecentChips = findViewById(R.id.containerRecentChips)
+
+// 1) Charger les récents et les afficher
+        loadRecentCities()
+        updateRecentChips()
+
+// 2) Chip "Ma position" → réutilise ton bouton existant
+        findViewById<View>(R.id.chipMyLocation).setOnClickListener {
+            // On déclenche exactement le même flux que ton bouton de localisation
+            findViewById<View?>(R.id.btnLocate)?.performClick()
+        }
 
         tvUv = findViewById(R.id.tvUv)
         rootContainer = findViewById(R.id.rootContainer)
@@ -204,6 +218,7 @@ class MainActivity : AppCompatActivity() {
                     // Sélectionne la ville et rafraîchit
                     val pos = cityNamesAdapter.getPosition(found.label).coerceAtLeast(0)
                     spinner.setSelection(pos)
+                    addToRecents(found)
                     refresh()
                 }
             }
@@ -214,6 +229,7 @@ class MainActivity : AppCompatActivity() {
         rootContainer.post { ensureLocationPermission { } }
     }
 
+    @SuppressLint("DefaultLocale")
     private fun refresh() {
         val index = spinner.selectedItemPosition.coerceIn(0, cities.lastIndex)
         val city = cities[index]
@@ -831,10 +847,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Fond "clair" ? -> texte foncé ; sinon texte clair
     private fun isBgLight(code: Int): Boolean = when (code) {
-        0, 1, 2, 3, 45, 48, 71, 73, 75, 85, 86 -> true   // clair, nuages, brouillard, neige
-        else -> false                                    // pluie/orage plutôt sombres
+        0, 1, 2, 3, 45, 48, 71, 73, 75, 85, 86 -> true
+        else -> false
     }
 
     private fun applyContentColorsFor(useDarkText: Boolean) {
@@ -855,13 +870,11 @@ class MainActivity : AppCompatActivity() {
             setHintTextColor(secondary)
         }
 
-        // Met la couleur du texte de l'élément SÉLECTIONNÉ du spinner
         (spinner.selectedView as? TextView)?.setTextColor(primary)
     }
 
     private fun pad(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    // Pastille circulaire derrière les icônes pour garantir le contraste
     private fun applyIconScrim(iv: ImageView, useDarkText: Boolean, paddingDp: Int) {
         val color = if (useDarkText) 0x33000000 else 0xB3FFFFFF.toInt() // noir 20% / blanc 70%
         val bg = GradientDrawable().apply {
@@ -1022,6 +1035,104 @@ class MainActivity : AppCompatActivity() {
         }
 
         saveCities()
+        addToRecents(city)
+    }
+
+    /** Ajoute une ville en tête de la LRU (max 10), sans doublon (lat/lon). */
+    private fun addToRecents(city: City) {
+        // dédup lat/lon (exacts) ; tu peux raffiner si besoin
+        recentCities.removeAll { it.lat == city.lat && it.lon == city.lon }
+        recentCities.add(0, city)
+        if (recentCities.size > 10) {
+            recentCities.removeAt(recentCities.lastIndex)   // ✅ compat 24
+        }
+        saveRecentCities()
+        updateRecentChips()
+    }
+
+    /** Persistance LRU */
+    private fun saveRecentCities() {
+        val arr = JSONArray()
+        recentCities.forEach { c ->
+            arr.put(JSONObject().apply {
+                put("label", c.label); put("lat", c.lat); put("lon", c.lon)
+            })
+        }
+        getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE)
+            .edit().putString("recent_cities_json", arr.toString()).apply()
+    }
+
+    /** Chargement LRU */
+    private fun loadRecentCities() {
+        val json = getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE)
+            .getString("recent_cities_json", null) ?: return
+        runCatching {
+            val arr = JSONArray(json)
+            recentCities.clear()
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                recentCities.add(City(o.getString("label"), o.getDouble("lat"), o.getDouble("lon")))
+            }
+        }
+    }
+
+    /** Construit les chips récents dynamiquement. */
+    private fun updateRecentChips() {
+        containerRecentChips.removeAllViews()
+
+        // Laisse "Ma position" en premier
+        val locChip = layoutInflater.inflate(R.layout.simple_chip_pill, containerRecentChips, false) as TextView?
+            ?: TextView(this).apply { text = "Ma position" }
+        locChip.id = R.id.chipMyLocation
+        // Si tu veux garder le locChip en premier, on le rajoute tout de suite :
+        containerRecentChips.addView(locChip)
+
+        // Puis les récents
+        recentCities.forEach { city ->
+            val tv = TextView(this).apply {
+                // même rendu que WidgetChipPill
+                setBackgroundResource(R.drawable.bg_uv_chip)
+                setTextColor(Color.WHITE)
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                text = city.label
+                // petite marge à gauche
+                val lp = ViewGroup.MarginLayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                lp.leftMargin = dp(8)
+                layoutParams = lp
+                setOnClickListener {
+                    selectCityFromChip(city)
+                }
+                setOnLongClickListener {
+                    // Appui long : épingler aux favoris (Étape 2), ou retirer des récents :
+                    // recentCities.removeAll { it.lat==city.lat && it.lon==city.lon }; saveRecentCities(); updateRecentChips(); true
+                    false
+                }
+            }
+            containerRecentChips.addView(tv)
+        }
+
+        // Rewire "Ma position" pour éviter de perdre le listener
+        locChip.setOnClickListener {
+            findViewById<View?>(R.id.btnLocate)?.performClick()
+        }
+    }
+
+    /** Sélectionne la ville via le spinner existant (ajoute si absente), puis refresh. */
+    private fun selectCityFromChip(city: City) {
+        ensureCityInSpinner(city)
+        val pos = cityNamesAdapter.getPosition(city.label).coerceAtLeast(0)
+        spinner.setSelection(pos)
+        refresh()
+    }
+
+    /** Garantit que la ville est présente dans le spinner/cities. */
+    private fun ensureCityInSpinner(city: City) {
+        val exists = cities.any { it.lat == city.lat && it.lon == city.lon }
+        if (!exists) {
+            cities.add(city)
+            cityNamesAdapter.add(city.label)
+            saveCities()
+        }
     }
 
     override fun onDestroy() {
