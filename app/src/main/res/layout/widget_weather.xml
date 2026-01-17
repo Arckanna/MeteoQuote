@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/bg_weather_clouds"
+    android:gravity="center">
+
+    <!-- En-tête avec ville et bouton refresh -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/widget_city"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Toulouse"
+            android:textSize="14sp"
+            android:textColor="#111111"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/widget_refresh"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@android:drawable/ic_menu_rotate"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Actualiser" />
+    </LinearLayout>
+
+    <!-- Contenu principal -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- Icône météo -->
+        <ImageView
+            android:id="@+id/widget_icon"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/ic_weather_cloudy_color"
+            android:contentDescription="Météo"
+            android:layout_marginEnd="12dp" />
+
+        <!-- Température et condition -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_temp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="20°C"
+                android:textSize="32sp"
+                android:textColor="#111111"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_condition"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Nuageux"
+                android:textSize="14sp"
+                android:textColor="#5E5E5E"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Citation (optionnelle, peut être masquée si pas de place) -->
+    <TextView
+        android:id="@+id/widget_quote"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Citation du jour"
+        android:textSize="12sp"
+        android:textColor="#5E5E5E"
+        android:textStyle="italic"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:layout_marginTop="8dp"
+        android:visibility="gone" />
+
+</LinearLayout>

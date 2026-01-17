@@ -49,6 +49,8 @@ import com.valerie.meteoquote.ui.WeatherViewModel
 import com.valerie.meteoquote.ui.WeatherViewModelFactory
 import com.valerie.meteoquote.util.WeatherUtils
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -170,14 +172,29 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Saisis un nom de ville", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            // Désactiver le bouton pendant la recherche
+            findViewById<Button>(R.id.btnAddCity).isEnabled = false
             lifecycleScope.launch {
-                val cityRepository = CityRepository(this@MainActivity)
-                val found = cityRepository.geocodeCity(q)
-                if (found == null) {
-                    Toast.makeText(this@MainActivity, "Ville introuvable", Toast.LENGTH_SHORT).show()
-                } else {
-                    viewModel.addCity(found)
-                    etCitySearch.text.clear()
+                try {
+                    val cityRepository = CityRepository(this@MainActivity)
+                    val found = withContext(Dispatchers.IO) {
+                        cityRepository.geocodeCity(q)
+                    }
+                    withContext(Dispatchers.Main) {
+                        if (found == null) {
+                            Toast.makeText(this@MainActivity, "Ville introuvable", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.addCity(found)
+                            etCitySearch.text.clear()
+                            Toast.makeText(this@MainActivity, "Ville ajoutée : ${found.label}", Toast.LENGTH_SHORT).show()
+                        }
+                        findViewById<Button>(R.id.btnAddCity).isEnabled = true
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "Erreur : ${e.message ?: "Impossible d'ajouter la ville"}", Toast.LENGTH_SHORT).show()
+                        findViewById<Button>(R.id.btnAddCity).isEnabled = true
+                    }
                 }
             }
         }
@@ -212,10 +229,20 @@ class MainActivity : AppCompatActivity() {
         // Gestion des erreurs
         state.error?.let { error ->
             ivIcon.setImageResource(WeatherUtils.wmoToIconRes(3)) // fallback "nuageux"
-            tvCondition.text = "Erreur : $error"
+            // Message d'erreur plus clair
+            val errorMessage = when {
+                error.contains("Pas de connexion", ignoreCase = true) -> "Pas de connexion internet"
+                error.contains("Délai", ignoreCase = true) -> "Connexion lente ou indisponible"
+                error.contains("réseau", ignoreCase = true) -> "Erreur réseau. Vérifiez votre connexion."
+                else -> "Erreur : $error"
+            }
+            tvCondition.text = errorMessage
             tvTemp.text = "— °C"
             containerHourly.removeAllViews()
             containerDaily.removeAllViews()
+            // Masquer les badges UV et AQI en cas d'erreur
+            tvUv?.visibility = View.GONE
+            tvAqi?.visibility = View.GONE
             return
         }
 

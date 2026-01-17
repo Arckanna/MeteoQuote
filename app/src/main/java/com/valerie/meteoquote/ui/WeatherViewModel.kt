@@ -3,6 +3,7 @@ package com.valerie.meteoquote.ui
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import android.app.Application
+import kotlinx.coroutines.Dispatchers
 import com.valerie.meteoquote.data.CityRepository
 import com.valerie.meteoquote.data.QuoteRepository
 import com.valerie.meteoquote.data.WeatherRepository
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 data class WeatherUiState(
@@ -74,7 +76,9 @@ class WeatherViewModel(
 
         viewModelScope.launch {
             try {
-                val result = weatherRepository.fetchWeather(targetCity.lat, targetCity.lon)
+                val result = withContext(Dispatchers.IO) {
+                    weatherRepository.fetchWeather(targetCity.lat, targetCity.lon)
+                }
                 val (temp, code) = result.current
                 val condition = WeatherUtils.wmoToLabel(code)
                 val quote = quoteRepository.getQuote(LocalDate.now(), code, advance = false)
@@ -142,7 +146,9 @@ class WeatherViewModel(
     fun detectLocation(lat: Double, lon: Double) {
         viewModelScope.launch {
             try {
-                val detected = cityRepository.reverseGeocode(lat, lon)
+                val detected = withContext(Dispatchers.IO) {
+                    cityRepository.reverseGeocode(lat, lon)
+                }
                     ?: City("Ma position", lat, lon)
                 
                 val currentCities = _uiState.value.cities.toMutableList()
