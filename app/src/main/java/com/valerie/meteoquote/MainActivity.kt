@@ -1,16 +1,26 @@
 package com.valerie.meteoquote
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
+
 import android.Manifest
+import android.animation.ArgbEvaluator
+import android.animation.ValueAnimator
+import android.content.Intent
 import android.content.pm.PackageManager
-import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.TransitionDrawable
+import android.location.Geocoder
+import android.net.Uri
 import android.os.Build
-import android.content.Context
 import android.os.Bundle
+import android.provider.Settings
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -20,67 +30,31 @@ import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
-import java.net.URL
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-import androidx.core.view.WindowInsetsCompat
-import android.graphics.drawable.TransitionDrawable
-import android.animation.ValueAnimator
-import android.animation.ArgbEvaluator
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.net.Uri
-import android.view.View
-import android.content.res.ColorStateList
-import android.util.Log
-import java.net.HttpURLConnection
-import androidx.appcompat.app.AlertDialog
-import android.provider.Settings
-import android.location.Geocoder
-import java.io.IOException
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.RelativeSizeSpan
-import android.text.style.StyleSpan
-import android.graphics.Typeface
-
-data class City(val label: String, val lat: Double, val lon: Double)
-data class HourlyForecast(val time: LocalDateTime, val temp: Double, val code: Int)
-data class DailyForecast(val date: LocalDate, val tmin: Double, val tmax: Double, val code: Int)
-data class Quote(val text: String, val author: String)
-data class WeatherResult(
-    val current: Pair<Double, Int>,
-    val hourly: List<HourlyForecast>,
-    val daily: List<DailyForecast>,
-    val uvNow: Double,
-    val uvMaxToday: Double,
-    val uvPeakTime: LocalDateTime?,
-    val aqiNow: Int,
-    val aqiMaxToday: Int,
-    val aqiPeakTime: LocalDateTime?
-)
+import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import com.valerie.meteoquote.data.CityRepository
+import com.valerie.meteoquote.data.QuoteRepository
+import com.valerie.meteoquote.data.WeatherRepository
+import com.valerie.meteoquote.data.model.City
+import com.valerie.meteoquote.ui.WeatherViewModel
+import com.valerie.meteoquote.ui.WeatherViewModelFactory
+import com.valerie.meteoquote.util.WeatherUtils
+import kotlinx.coroutines.launch
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
-    private val defaultCities = listOf(
-        City("Toulouse", 43.6047, 1.4442)
-    )
-
-    private val cities = mutableListOf<City>()
+    
+    private lateinit var viewModel: WeatherViewModel
     private lateinit var spinner: Spinner
     private lateinit var ivIcon: ImageView
     private lateinit var tvCondition: TextView
@@ -94,9 +68,7 @@ class MainActivity : AppCompatActivity() {
     private var tvUv: TextView? = null
     private var currentThemeRes: Int? = null
     private var currentStatusColor: Int? = null
-    private var lastWeatherCode: Int? = null
     private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var suppressNextRefresh = true
 
     // --- Permissions localisation ---
@@ -127,6 +99,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Initialisation du ViewModel
+        val factory = WeatherViewModelFactory(application)
+        viewModel = ViewModelProvider(this, factory)[WeatherViewModel::class.java]
+
         tvUv = findViewById(R.id.tvUv)
         rootContainer = findViewById(R.id.rootContainer)
         spinner = findViewById(R.id.spinnerCities)
@@ -144,33 +120,41 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        val saved = loadCities()
-        cities.clear()
-        cities.addAll(if (saved.isNotEmpty()) saved else defaultCities)
+        setupSpinner()
+        setupButtons()
+        observeViewModel()
 
-        cityNamesAdapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            cities.map { it.label }.toMutableList()
-        )
-        spinner.adapter = cityNamesAdapter
+        rootContainer.post { ensureLocationPermission { } }
+    }
+
+    private fun setupSpinner() {
+        viewModel.uiState.value.cities.let { cities ->
+            cityNamesAdapter = ArrayAdapter(
+                this,
+                android.R.layout.simple_spinner_dropdown_item,
+                cities.map { it.label }.toMutableList()
+            )
+            spinner.adapter = cityNamesAdapter
+            if (cities.isNotEmpty()) {
+                spinner.setSelection(viewModel.uiState.value.selectedCityIndex)
+            }
+        }
 
         spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>, view: android.view.View?, position: Int, id: Long) {
-                if (suppressNextRefresh) { suppressNextRefresh = false; return }
-                refresh()
+                if (suppressNextRefresh) {
+                    suppressNextRefresh = false
+                    return
+                }
+                viewModel.selectCity(position)
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>) {}
         }
+    }
 
-        val btnNewQuote: Button = findViewById(R.id.btnNewQuote)
-        btnNewQuote.setOnClickListener {
-            val code = lastWeatherCode
-            if (code != null) {
-                tvQuote.text = nextQuote(LocalDate.now(), code, advance = true)
-            } else {
-                Toast.makeText(this, "Patiente, météo en cours…", Toast.LENGTH_SHORT).show()
-            }
+    private fun setupButtons() {
+        findViewById<Button>(R.id.btnNewQuote).setOnClickListener {
+            viewModel.nextQuote()
         }
 
         findViewById<Button?>(R.id.btnFeedback)?.setOnClickListener { openFeedbackForm() }
@@ -180,143 +164,117 @@ class MainActivity : AppCompatActivity() {
         }
 
         val etCitySearch: EditText = findViewById(R.id.etCitySearch)
-        val btnAddCity: Button = findViewById(R.id.btnAddCity)
-        btnAddCity.setOnClickListener {
+        findViewById<Button>(R.id.btnAddCity).setOnClickListener {
             val q = etCitySearch.text.toString().trim()
             if (q.isEmpty()) {
                 Toast.makeText(this, "Saisis un nom de ville", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            ioScope.launch {
-                val found = geocodeCity(q)
-                withContext(Dispatchers.Main) {
-                    if (found == null) {
-                        Toast.makeText(this@MainActivity, "Ville introuvable", Toast.LENGTH_SHORT).show()
-                        return@withContext
-                    }
-                    // Évite les doublons (par libellé)
-                    val already = cities.any { it.label.equals(found.label, ignoreCase = true) }
-                    if (!already) {
-                        cities.add(found)
-                        cityNamesAdapter.add(found.label)
-                        saveCities()   // persistance
-                    }
-                    // Sélectionne la ville et rafraîchit
-                    val pos = cityNamesAdapter.getPosition(found.label).coerceAtLeast(0)
-                    spinner.setSelection(pos)
-                    refresh()
-                }
-            }
-        }
-
-        refresh()
-
-        rootContainer.post { ensureLocationPermission { } }
-    }
-
-    private fun refresh() {
-        val index = spinner.selectedItemPosition.coerceIn(0, cities.lastIndex)
-        val city = cities[index]
-
-        // État d'attente
-        tvCondition.text = "Chargement…"
-        tvTemp.text = "— °C"
-
-        ioScope.launch {
-            try {
-                val result = fetchFullWeather(city.lat, city.lon)
-                val (temp, code) = result.current
-                val label = wmoToLabel(code)
-
-                withContext(Dispatchers.Main) {
-                    ivIcon.setImageResource(wmoToIconRes(code))
-                    tvCondition.text = label
-                    tvTemp.text = String.format("%.1f °C", temp)
-
-                    applyWeatherTheme(code)
-                    val light = isBgLight(code)
-                    applyContentColorsFor(light)
-                    applyIconScrim(ivIcon, light, 8)
-
-                    lastWeatherCode = code
-                    tvQuote.text = nextQuote(LocalDate.now(), code, advance = false)
-
-                    // UV badge
-                    val (uvLabel, uvColor) = uvCategory(result.uvMaxToday)
-                    val peakTxt = result.uvPeakTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "—"
-                    tvUv?.apply {
-                        setBackgroundResource(R.drawable.bg_uv_chip)
-                        val uvTop = String.format(
-                            Locale.FRANCE, "UV %.1f • pic %.1f à %s",
-                            result.uvNow, result.uvMaxToday, peakTxt
-                        )
-                        val uvBottom = "Risque UV\u202F: ${uvLabel.lowercase(Locale.FRENCH)}"
-                        tvUv?.text = boldLine1SmallLine2(uvTop, uvBottom)
-                        backgroundTintList = ColorStateList.valueOf(uvColor)
-                        setTextColor(Color.WHITE)
-                        visibility = View.VISIBLE
-                    }
-
-                    // AQI (now + pic heure)
-                    val (aqiLabel, aqiColor) = aqiCategoryEU(result.aqiNow)
-                    tvAqi?.let { aqi ->
-                        aqi.setBackgroundResource(R.drawable.bg_uv_chip)
-                        val aqiPeakTxt = result.aqiPeakTime
-                            ?.format(DateTimeFormatter.ofPattern("HH:mm"))
-                            ?: "—"
-                        val aqiTop = "AQI ${result.aqiNow} • pic ${result.aqiMaxToday} à $aqiPeakTxt"
-                        val aqiBottom = "Qualité de l’air\u202F: ${aqiLabel.lowercase(Locale.FRENCH)}"
-                        tvAqi?.text = boldLine1SmallLine2(aqiTop, aqiBottom)
-                        ViewCompat.setBackgroundTintList(aqi, ColorStateList.valueOf(aqiColor))
-                        aqi.setTextColor(Color.WHITE)
-                        aqi.visibility = View.VISIBLE
-                    }
-
-                    // Rendus
-                    renderHourly(result.hourly, light)
-                    renderDaily(result.daily, light)
-                }
-
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    ivIcon.setImageResource(wmoToIconRes(3)) // fallback "nuageux"
-                    tvCondition.text = "Erreur : ${e.message ?: "réseau"}"
-                    tvTemp.text = "— °C"
-                    containerHourly.removeAllViews()
-                    containerDaily.removeAllViews()
+            lifecycleScope.launch {
+                val cityRepository = CityRepository(this@MainActivity)
+                val found = cityRepository.geocodeCity(q)
+                if (found == null) {
+                    Toast.makeText(this@MainActivity, "Ville introuvable", Toast.LENGTH_SHORT).show()
+                } else {
+                    viewModel.addCity(found)
+                    etCitySearch.text.clear()
                 }
             }
         }
     }
+
+    private fun observeViewModel() {
+        lifecycleScope.launch {
+            viewModel.uiState.collect { state ->
+                updateUI(state)
+            }
+        }
+    }
+
+    private fun updateUI(state: com.valerie.meteoquote.ui.WeatherUiState) {
+        // Mise à jour du spinner si les villes ont changé
+        if (state.cities.size != cityNamesAdapter.count) {
+            cityNamesAdapter.clear()
+            cityNamesAdapter.addAll(state.cities.map { it.label })
+            if (state.selectedCityIndex in state.cities.indices) {
+                suppressNextRefresh = true
+                spinner.setSelection(state.selectedCityIndex)
+            }
+        }
+
+        // Gestion du chargement
+        if (state.isLoading) {
+            tvCondition.text = "Chargement…"
+            tvTemp.text = "— °C"
+            return
+        }
+
+        // Gestion des erreurs
+        state.error?.let { error ->
+            ivIcon.setImageResource(WeatherUtils.wmoToIconRes(3)) // fallback "nuageux"
+            tvCondition.text = "Erreur : $error"
+            tvTemp.text = "— °C"
+            containerHourly.removeAllViews()
+            containerDaily.removeAllViews()
+            return
+        }
+
+        // Mise à jour de la météo
+        state.currentTemp?.let { temp ->
+            state.weatherCode?.let { code ->
+                ivIcon.setImageResource(WeatherUtils.wmoToIconRes(code))
+                tvCondition.text = state.condition
+                tvTemp.text = String.format("%.1f °C", temp)
+
+                applyWeatherTheme(code)
+                val light = WeatherUtils.isBgLight(code)
+                applyContentColorsFor(light)
+                applyIconScrim(ivIcon, light, 8)
+
+                // UV badge
+                tvUv?.apply {
+                    setBackgroundResource(R.drawable.bg_uv_chip)
+                    val uvTop = String.format(
+                        Locale.FRANCE, "UV %.1f • pic %.1f à %s",
+                        state.uvNow, state.uvMaxToday, state.uvPeakTime ?: "—"
+                    )
+                    val uvBottom = "Risque UV\u202F: ${state.uvLabel.lowercase(Locale.FRENCH)}"
+                    text = boldLine1SmallLine2(uvTop, uvBottom)
+                    backgroundTintList = ColorStateList.valueOf(state.uvColor)
+                    setTextColor(Color.WHITE)
+                    visibility = View.VISIBLE
+                }
+
+                // AQI
+                tvAqi?.let { aqi ->
+                    aqi.setBackgroundResource(R.drawable.bg_uv_chip)
+                    val aqiTop = "AQI ${state.aqiNow} • pic ${state.aqiMaxToday} à ${state.aqiPeakTime ?: "—"}"
+                    val aqiBottom = "Qualité de l'air\u202F: ${state.aqiLabel.lowercase(Locale.FRENCH)}"
+                    aqi.text = boldLine1SmallLine2(aqiTop, aqiBottom)
+                    ViewCompat.setBackgroundTintList(aqi, ColorStateList.valueOf(state.aqiColor))
+                    aqi.setTextColor(Color.WHITE)
+                    aqi.visibility = View.VISIBLE
+                }
+
+                // Rendus
+                renderHourly(state.hourlyForecasts, light)
+                renderDaily(state.dailyForecasts, light)
+            }
+        }
+
+        // Citation
+        tvQuote.text = state.quote
+    }
+
     private fun boldLine1SmallLine2(top: String, bottom: String) =
         SpannableStringBuilder()
             .append(top, StyleSpan(Typeface.BOLD), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             .append("\n")
             .append(bottom, RelativeSizeSpan(0.92f), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
 
-    private fun themeDrawableRes(code: Int): Int = when (code) {
-        0 -> R.drawable.bg_weather_clear
-        1, 2, 3 -> R.drawable.bg_weather_clouds
-        45, 48 -> R.drawable.bg_weather_fog
-        51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> R.drawable.bg_weather_rain
-        71, 73, 75, 85, 86 -> R.drawable.bg_weather_snow
-        95, 96, 99 -> R.drawable.bg_weather_thunder
-        else -> R.drawable.bg_weather_clouds
-    }
-
-    private fun statusColorRes(code: Int): Int = when (code) {
-        0 -> R.color.status_clear
-        1, 2, 3 -> R.color.status_clouds
-        45, 48 -> R.color.status_fog
-        51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> R.color.status_rain
-        71, 73, 75, 85, 86 -> R.color.status_snow
-        95, 96, 99 -> R.color.status_thunder
-        else -> R.color.status_clouds
-    }
-
     private fun applyWeatherTheme(code: Int, durationMs: Long = 350L) {
-        val newBgRes = themeDrawableRes(code)
-        val newStatus = ContextCompat.getColor(this, statusColorRes(code))
+        val newBgRes = WeatherUtils.themeDrawableRes(code)
+        val newStatus = ContextCompat.getColor(this, WeatherUtils.statusColorRes(code))
 
         val oldBgRes = currentThemeRes
         if (oldBgRes == null) {
@@ -342,418 +300,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-    private fun fetchFullWeather(lat: Double, lon: Double): WeatherResult {
-        val url = "https://api.open-meteo.com/v1/forecast" +
-                "?latitude=$lat&longitude=$lon" +
-                "&current=temperature_2m,weather_code" +
-                "&hourly=temperature_2m,weather_code,uv_index" +
-                "&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max" +
-                "&timezone=auto"
-
-        val body = URL(url).openStream().bufferedReader().use { it.readText() }
-        val root = JSONObject(body)
-
-        // Current
-        val cur = root.getJSONObject("current")
-        val currentTemp = cur.getDouble("temperature_2m")
-        val currentCode = cur.getInt("weather_code")
-
-        // Hourly
-        val hourly = root.getJSONObject("hourly")
-        val hTimes = hourly.getJSONArray("time")
-        val hTemps = hourly.getJSONArray("temperature_2m")
-        val hCodes = hourly.getJSONArray("weather_code")
-        val hUv    = hourly.getJSONArray("uv_index")
-        val now = LocalDateTime.now()
-
-        val hList = mutableListOf<HourlyForecast>()
-        var uvNow = 0.0
-        var grabbedUv = false
-        for (i in 0 until hTimes.length()) {
-            val t = LocalDateTime.parse(hTimes.getString(i))
-            if (!grabbedUv && !t.isBefore(now)) {
-                uvNow = hUv.optDouble(i, 0.0)
-                grabbedUv = true
-            }
-            if (!t.isBefore(now)) {
-                hList.add(HourlyForecast(t, hTemps.getDouble(i), hCodes.getInt(i)))
-            }
-            if (hList.size >= 24) break
-        }
-
-        // Daily (7 jours)
-        val daily = root.getJSONObject("daily")
-        val dTimes = daily.getJSONArray("time")
-        val dMax = daily.getJSONArray("temperature_2m_max")
-        val dMin = daily.getJSONArray("temperature_2m_min")
-        val dCodes = daily.getJSONArray("weather_code")
-        val dUvMax = daily.getJSONArray("uv_index_max")
-        val dList = mutableListOf<DailyForecast>()
-        val daysToTake = minOf(7, dTimes.length())
-        for (i in 0 until daysToTake) {
-            val d = LocalDate.parse(dTimes.getString(i))
-            dList.add(DailyForecast(d, dMin.getDouble(i), dMax.getDouble(i), dCodes.getInt(i)))
-        }
-
-        val today = LocalDate.now()
-        var peakVal = -1.0
-        var peakTime: LocalDateTime? = null
-        for (i in 0 until hTimes.length()) {
-            val t = LocalDateTime.parse(hTimes.getString(i))
-            if (t.toLocalDate() == today) {
-                val v = hUv.optDouble(i, 0.0)
-                if (v > peakVal) { peakVal = v; peakTime = t }
-            }
-        }
-        val uvMaxToday = if (peakVal >= 0) peakVal else if (dUvMax.length() > 0) dUvMax.getDouble(0) else 0.0
-
-        // AQI (européen)
-        val urlAq = "https://air-quality-api.open-meteo.com/v1/air-quality" +
-                "?latitude=$lat&longitude=$lon" +
-                "&hourly=european_aqi" +
-                "&timezone=auto"
-        val aq = URL(urlAq).openStream().bufferedReader().use { it.readText() }
-        val aqr = JSONObject(aq).getJSONObject("hourly")
-        val aTimes = aqr.getJSONArray("time")
-        val aVals  = aqr.getJSONArray("european_aqi")
-
-        var aqiNow = 0
-        var aqiMaxToday = 0
-        var tookNow = false
-        var aqiPeakTime: LocalDateTime? = null
-        for (i in 0 until aTimes.length()) {
-            val t = LocalDateTime.parse(aTimes.getString(i))
-            val v = aVals.optInt(i, 0)
-            if (!t.isBefore(now) && !tookNow) { aqiNow = v; tookNow = true }
-            if (t.toLocalDate() == today && v > aqiMaxToday) {
-                aqiMaxToday = v
-                aqiPeakTime = t
-            }
-        }
-        if (!tookNow && aVals.length() > 0) aqiNow = aVals.optInt(0, 0)
-        if (aqiMaxToday < 0) aqiMaxToday = aVals.optInt(0, 0)
-
-        return WeatherResult(currentTemp to currentCode, hList, dList, uvNow, uvMaxToday, peakTime, aqiNow, aqiMaxToday,
-            aqiPeakTime   )
-    }
-
-    private fun aqiCategoryEU(v: Int): Pair<String, Int> {
-        val res = when {
-            v <= 20  -> R.color.aqi_good      // Très bon/Bon
-            v <= 40  -> R.color.aqi_fair      // Moyen
-            v <= 60  -> R.color.aqi_mod       // Médiocre
-            v <= 80  -> R.color.aqi_poor      // Mauvais
-            v <= 100 -> R.color.aqi_vpoor     // Très mauvais
-            else     -> R.color.aqi_epoor     // Extrêmement mauvais
-        }
-        val label = when {
-            v <= 20  -> "Bon"
-            v <= 40  -> "Moyen"
-            v <= 60  -> "Médiocre"
-            v <= 80  -> "Mauvais"
-            v <= 100 -> "Très mauvais"
-            else     -> "Extrêmement mauvais"
-        }
-        return label to ContextCompat.getColor(this, res)
-    }
-
-    private fun uvCategory(v: Double): Pair<String, Int> {
-        val resId = when {
-            v < 3  -> R.color.uv_low
-            v < 6  -> R.color.uv_mod
-            v < 8  -> R.color.uv_high
-            v < 11 -> R.color.uv_veryhigh
-            else   -> R.color.uv_extreme
-        }
-        val label = when {
-            v < 3  -> "Faible"
-            v < 6  -> "Modéré"
-            v < 8  -> "Élevé"
-            v < 11 -> "Très élevé"
-            else   -> "Extrême"
-        }
-        return label to ContextCompat.getColor(this, resId)
-    }
-
-    private fun geocodeCity(name: String): City? {
-        val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
-        val url =
-            "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=1&language=fr&format=json"
-        val body = URL(url).openStream().bufferedReader().use { it.readText() }
-        val results = JSONObject(body).optJSONArray("results") ?: return null
-        if (results.length() == 0) return null
-        val first = results.getJSONObject(0)
-
-        val nm = first.optString("name", name)
-        val admin1 = first.optString("admin1", "")
-        val country = first.optString("country_code", "")
-        val label = when {
-            admin1.isNotEmpty() && country.isNotEmpty() -> "$nm, $admin1 ($country)"
-            country.isNotEmpty() -> "$nm ($country)"
-            else -> nm
-        }
-
-        val lat = first.getDouble("latitude")
-        val lon = first.getDouble("longitude")
-        return City(label, lat, lon)
-    }
-
-    private fun reverseGeocode(lat: Double, lon: Double): City? {
-        runCatching { reverseOpenMeteo(lat, lon) }.getOrNull()?.let { if (it != null) return it }
-
-        runCatching { reverseNominatim(lat, lon) }.getOrNull()?.let { if (it != null) return it }
-
-        return runCatching { reverseAndroidGeocoder(lat, lon) }.getOrNull()
-    }
-
-    private fun reverseOpenMeteo(lat: Double, lon: Double): City? {
-        val url = URL(
-            "https://geocoding-api.open-meteo.com/v1/reverse" +
-                    "?latitude=$lat&longitude=$lon&language=fr&format=json&count=1"
-        )
-        var conn: HttpURLConnection? = null
-        return try {
-            conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10_000
-                readTimeout = 10_000
-                requestMethod = "GET"
-            }
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val body = stream.bufferedReader().use { it.readText() }
-
-            if (code !in 200..299) {
-                Log.w("MeteoQuote", "OpenMeteo reverse HTTP $code: $body")
-                null
-            } else {
-                val results = JSONObject(body).optJSONArray("results") ?: return null
-                if (results.length() == 0) return null
-                val first = results.getJSONObject(0)
-
-                val nm = first.optString("name", "")
-                val admin1 = first.optString("admin1", "")
-                val country = first.optString("country_code", "")
-                val label = buildLabel(nm, town=null, village=null, municipality=null, county=null, state=admin1, countryCode=country)
-                val la = first.optDouble("latitude", lat)
-                val lo = first.optDouble("longitude", lon)
-                if (label.isBlank()) null else City(label, la, lo)
-            }
-        } catch (e: Exception) {
-            Log.e("MeteoQuote", "reverseOpenMeteo error", e)
-            null
-        } finally {
-            conn?.disconnect()
-        }
-    }
-
-    private fun reverseNominatim(lat: Double, lon: Double): City? {
-        val url = URL(
-            "https://nominatim.openstreetmap.org/reverse" +
-                    "?lat=$lat&lon=$lon&format=jsonv2&accept-language=fr&zoom=10"
-        )
-        var conn: HttpURLConnection? = null
-        return try {
-            conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10_000
-                readTimeout = 10_000
-                requestMethod = "GET"
-                setRequestProperty("User-Agent", "MeteoQuote/6.2 (ivray3dlabs@gmail.com)")
-            }
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val body = stream.bufferedReader().use { it.readText() }
-
-            if (code !in 200..299) {
-                Log.w("MeteoQuote", "Nominatim reverse HTTP $code: $body")
-                null
-            } else {
-                val jo = JSONObject(body)
-                val addr = jo.optJSONObject("address") ?: return null
-
-                val city = addr.optString("city", "")
-                val town = addr.optString("town", "")
-                val village = addr.optString("village", "")
-                val municipality = addr.optString("municipality", "")
-                val county = addr.optString("county", "")
-                val state = addr.optString("state", "")
-                val cc = addr.optString("country_code", "").uppercase(Locale.ROOT)
-
-                val label = buildLabel(city, town, village, municipality, county, state, cc)
-                if (label.isBlank()) null else City(label, lat, lon)
-            }
-        } catch (e: Exception) {
-            Log.e("MeteoQuote", "reverseNominatim error", e)
-            null
-        } finally {
-            conn?.disconnect()
-        }
-    }
-
-    private fun reverseAndroidGeocoder(lat: Double, lon: Double): City? {
-        if (!Geocoder.isPresent()) return null
-        return try {
-            val geo = Geocoder(this, Locale.getDefault())
-            val list = geo.getFromLocation(lat, lon, 1)
-            val a = list?.firstOrNull() ?: return null
-            val city = a.locality ?: a.subAdminArea ?: a.subLocality ?: ""
-            val state = a.adminArea ?: ""
-            val cc = a.countryCode ?: ""
-            val label = buildLabel(city, town=null, village=null, municipality=null, county=a.subAdminArea, state=state, countryCode=cc)
-            if (label.isBlank()) null else City(label, lat, lon)
-        } catch (e: IOException) {
-            Log.e("MeteoQuote", "reverseAndroidGeocoder IO", e); null
-        } catch (e: Exception) {
-            Log.e("MeteoQuote", "reverseAndroidGeocoder error", e); null
-        }
-    }
-
-    private fun buildLabel(
-        city: String?,
-        town: String?,
-        village: String?,
-        municipality: String?,
-        county: String?,
-        state: String?,
-        countryCode: String?
-    ): String {
-        val place = when {
-            !city.isNullOrBlank() -> city
-            !town.isNullOrBlank() -> town
-            !village.isNullOrBlank() -> village
-            !municipality.isNullOrBlank() -> municipality
-            !county.isNullOrBlank() -> county
-            else -> ""
-        }
-        val admin1 = state?.takeIf { it.isNotBlank() } ?: ""
-        val cc = countryCode?.takeIf { it.isNotBlank() } ?: ""
-        return when {
-            place.isBlank() -> ""
-            admin1.isNotEmpty() && cc.isNotEmpty() -> "$place, $admin1 ($cc)"
-            cc.isNotEmpty() -> "$place ($cc)"
-            admin1.isNotEmpty() -> "$place, $admin1"
-            else -> place
-        }
-    }
-
-    private fun wmoToLabel(code: Int): String = when (code) {
-        0 -> "Ciel clair"
-        1, 2, 3 -> "Plutôt nuageux"
-        45, 48 -> "Brouillard"
-        51, 53, 55 -> "Bruine"
-        56, 57 -> "Bruine verglaçante"
-        61, 63, 65, 80, 81, 82 -> "Pluie"
-        66, 67 -> "Pluie verglaçante"
-        71, 73, 75, 85, 86 -> "Neige"
-        95, 96, 99 -> "Orage"
-        else -> "Conditions variées"
-    }
-    private fun wmoToIconRes(code: Int): Int = when (code) {
-        0 -> R.drawable.ic_weather_sunny_color
-        1, 2, 3 -> R.drawable.ic_weather_cloudy_color
-        45, 48 -> R.drawable.ic_weather_fog_color
-        51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> R.drawable.ic_weather_rain_color
-        71, 73, 75, 85, 86 -> R.drawable.ic_weather_snow_color
-        95, 96, 99 -> R.drawable.ic_weather_thunder_color
-        else -> R.drawable.ic_weather_cloudy_color
-    }
-
-
-    private fun prefs() = getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE)
-    private fun bucketName(code: Int): String = when (code) {
-        0 -> "clear"
-        1, 2, 3 -> "clouds"
-        45, 48 -> "fog"
-        51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> "rain"
-        71, 73, 75, 85, 86 -> "snow"
-        95, 96, 99 -> "thunder"
-        else -> "clouds"
-    }
-    private fun quotesFor(code: Int): List<Quote> {
-        val clear = listOf(
-            Quote("Le soleil brille pour tout le monde.", "Proverbe"),
-            Quote("La simplicité est la sophistication suprême.", "L. de Vinci"),
-            Quote("Crée la lumière que tu cherches.", "Anonyme")
-        )
-        val clouds = listOf(
-            Quote("Au-dessus des nuages, le ciel est toujours bleu.", "Proverbe"),
-            Quote("Patience : les nuages se dissipent toujours.", "Anonyme"),
-            Quote("Notre clarté naît parfois de l’ombre.", "Anonyme")
-        )
-        val rain = listOf(
-            Quote("Sans la pluie, rien ne pousse.", "Anonyme"),
-            Quote("Il faut de la pluie pour voir l’arc-en-ciel.", "D. Parton"),
-            Quote("Chaque goutte prépare une moisson.", "Proverbe")
-        )
-        val snow = listOf(
-            Quote("La paix tombe parfois comme la neige.", "Anonyme"),
-            Quote("Chaque flocon a sa forme et son destin.", "Proverbe"),
-            Quote("Le silence de la neige dit l’essentiel.", "Anonyme")
-        )
-        val fog = listOf(
-            Quote("Quand la route est brumeuse, avance pas à pas.", "Anonyme"),
-            Quote("La clarté se révèle en chemin.", "Anonyme"),
-            Quote("Tout brouillard finit par se lever.", "Proverbe")
-        )
-        val thunder = listOf(
-            Quote("Le courage n’est pas l’absence de peur.", "N. Mandela"),
-            Quote("L’éclair éclaire l’instant : saisis-le.", "Anonyme"),
-            Quote("La tempête forge les marins.", "Proverbe")
-        )
-        return when (code) {
-            0 -> clear
-            1, 2, 3 -> clouds
-            45, 48 -> fog
-            51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> rain
-            71, 73, 75, 85, 86 -> snow
-            95, 96, 99 -> thunder
-            else -> clouds
-        }
-    }
-    /** Renvoie une citation formatée. Si advance=true, passe à la suivante et persiste l’index. */
-    private fun nextQuote(date: LocalDate, code: Int, advance: Boolean): String {
-        val bucket = quotesFor(code)
-        the@run {
-            val key = "quote_idx_${bucketName(code)}"
-            val p = prefs()
-            var idx = p.getInt(key, (date.dayOfYear - 1) % bucket.size)
-            if (advance) idx = (idx + 1) % bucket.size
-            p.edit().putInt(key, idx).apply()
-            val q = bucket[idx]
-            return "“${q.text}” — ${q.author}"
-        }
-    }
-
-    private fun saveCities() {
-        val arr = JSONArray()
-        cities.forEach { c ->
-            val o = JSONObject()
-            o.put("label", c.label)
-            o.put("lat", c.lat)
-            o.put("lon", c.lon)
-            arr.put(o)
-        }
-        getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE)
-            .edit()
-            .putString("cities_json", arr.toString())
-            .apply()
-    }
-    private fun loadCities(): List<City> {
-        val json = getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE)
-            .getString("cities_json", null) ?: return emptyList()
-        val arr = JSONArray(json)
-        val list = mutableListOf<City>()
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            list.add(City(o.getString("label"), o.getDouble("lat"), o.getDouble("lon")))
-        }
-        return list
-    }
-
-
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-    private fun renderHourly(items: List<HourlyForecast>, useDarkText: Boolean) {
+    private fun renderHourly(items: List<com.valerie.meteoquote.data.model.HourlyForecast>, useDarkText: Boolean) {
         containerHourly.removeAllViews()
         val fmtHour = DateTimeFormatter.ofPattern("HH'h'", Locale.getDefault())
         val textColor = if (useDarkText) 0xFF111111.toInt() else Color.WHITE
@@ -769,9 +318,9 @@ class MainActivity : AppCompatActivity() {
             }
 
             val iv = ImageView(this).apply {
-                setImageResource(wmoToIconRes(h.code))
+                setImageResource(WeatherUtils.wmoToIconRes(h.code))
                 layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
-                contentDescription = wmoToLabel(h.code)
+                contentDescription = WeatherUtils.wmoToLabel(h.code)
             }
             applyIconScrim(iv, useDarkText, 6)
 
@@ -791,7 +340,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun renderDaily(items: List<DailyForecast>, useDarkText: Boolean) {
+    private fun renderDaily(items: List<com.valerie.meteoquote.data.model.DailyForecast>, useDarkText: Boolean) {
         containerDaily.removeAllViews()
         val fmtDay = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
         val textColor = if (useDarkText) 0xFF111111.toInt() else Color.WHITE
@@ -814,9 +363,9 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
             val iv = ImageView(this).apply {
-                setImageResource(wmoToIconRes(d.code))
+                setImageResource(WeatherUtils.wmoToIconRes(d.code))
                 layoutParams = LinearLayout.LayoutParams(dp(28), dp(28)).apply { rightMargin = dp(12) }
-                contentDescription = wmoToLabel(d.code)
+                contentDescription = WeatherUtils.wmoToLabel(d.code)
             }
             applyIconScrim(iv, useDarkText, 6)
 
@@ -831,14 +380,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Fond "clair" ? -> texte foncé ; sinon texte clair
-    private fun isBgLight(code: Int): Boolean = when (code) {
-        0, 1, 2, 3, 45, 48, 71, 73, 75, 85, 86 -> true   // clair, nuages, brouillard, neige
-        else -> false                                    // pluie/orage plutôt sombres
-    }
-
     private fun applyContentColorsFor(useDarkText: Boolean) {
-        val primary   = 0xFF111111.toInt()
+        val primary = 0xFF111111.toInt()
         val secondary = 0xFF5E5E5E.toInt()
 
         tvCondition.setTextColor(primary)
@@ -855,15 +398,13 @@ class MainActivity : AppCompatActivity() {
             setHintTextColor(secondary)
         }
 
-        // Met la couleur du texte de l'élément SÉLECTIONNÉ du spinner
         (spinner.selectedView as? TextView)?.setTextColor(primary)
     }
 
     private fun pad(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    // Pastille circulaire derrière les icônes pour garantir le contraste
     private fun applyIconScrim(iv: ImageView, useDarkText: Boolean, paddingDp: Int) {
-        val color = if (useDarkText) 0x33000000 else 0xB3FFFFFF.toInt() // noir 20% / blanc 70%
+        val color = if (useDarkText) 0x33000000 else 0xB3FFFFFF.toInt()
         val bg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(color)
@@ -893,7 +434,7 @@ class MainActivity : AppCompatActivity() {
         val formBase = "https://docs.google.com/forms/d/e/1FAIpQLSf1PBwF2QuVXHx8IfWM12jCh-7Tc0LhRgwfQZVBLZ_29bS6zg/viewform"
         val entryVersion = "entry.621899440"
         val entryAndroid = "entry.1531362918"
-        val entryDevice  = "entry.1583715954"
+        val entryDevice = "entry.1583715954"
 
         val url = Uri.parse(formBase).buildUpon()
             .appendQueryParameter("usp", "pp_url")
@@ -905,7 +446,7 @@ class MainActivity : AppCompatActivity() {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, url))
         } catch (_: Exception) {
-            Toast.makeText(this, "Impossible d’ouvrir le formulaire.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Impossible d'ouvrir le formulaire.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -924,8 +465,6 @@ class MainActivity : AppCompatActivity() {
         ))
     }
 
-    /** Demande (si besoin) puis exécute onGranted si déjà accordée. Quand on vient d’accorder,
-     *  c’est le launcher (ci-dessus) qui appellera locateAndSelectCity(). */
     private fun ensureLocationPermission(onGranted: () -> Unit) {
         if (hasLocationPermission()) {
             onGranted()
@@ -958,12 +497,17 @@ class MainActivity : AppCompatActivity() {
             fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
                 .addOnSuccessListener { loc ->
                     if (loc != null) {
-                        applyLocation(loc.latitude, loc.longitude)
+                        viewModel.detectLocation(loc.latitude, loc.longitude)
+                        Toast.makeText(this, "Position détectée", Toast.LENGTH_SHORT).show()
                     } else {
                         fused.lastLocation
                             .addOnSuccessListener { last ->
-                                if (last != null) applyLocation(last.latitude, last.longitude)
-                                else Toast.makeText(this, "Position indisponible.", Toast.LENGTH_SHORT).show()
+                                if (last != null) {
+                                    viewModel.detectLocation(last.latitude, last.longitude)
+                                    Toast.makeText(this, "Position détectée", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(this, "Position indisponible.", Toast.LENGTH_SHORT).show()
+                                }
                             }
                             .addOnFailureListener {
                                 Toast.makeText(this, "Erreur position (fallback).", Toast.LENGTH_SHORT).show()
@@ -983,49 +527,5 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Localisation indisponible.", Toast.LENGTH_SHORT).show()
             findViewById<Button?>(R.id.btnLocate)?.isEnabled = true
         }
-    }
-
-    private fun applyLocation(lat: Double, lon: Double) {
-        ioScope.launch {
-            val detected = try {
-                reverseGeocode(lat, lon)
-            } catch (e: Exception) {
-                Log.e("MeteoQuote", "applyLocation/reverse failed", e)
-                null
-            } ?: City("Ma position", lat, lon)
-
-            withContext(Dispatchers.Main) {
-                selectOrInsertCity(detected)
-                refresh()
-                Toast.makeText(this@MainActivity, "Ville détectée : ${detected.label}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /** Met à jour le spinner/liste villes : met à jour ou insère la ville détectée, puis persiste. */
-    private fun selectOrInsertCity(city: City) {
-        val count = cityNamesAdapter.count
-        var pos = -1
-        for (i in 0 until count) {
-            val lbl = cityNamesAdapter.getItem(i) ?: continue
-            if (lbl.equals(city.label, ignoreCase = true)) { pos = i; break }
-        }
-
-        if (pos >= 0) {
-            val idx = cities.indexOfFirst { it.label.equals(city.label, ignoreCase = true) }
-            if (idx >= 0) cities[idx] = city.copy(label = cities[idx].label) // garde le même label
-            spinner.setSelection(pos, true)
-        } else {
-            cities.add(0, city)
-            cityNamesAdapter.insert(city.label, 0)
-            spinner.setSelection(0, true)
-        }
-
-        saveCities()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        ioScope.cancel()
     }
 }
