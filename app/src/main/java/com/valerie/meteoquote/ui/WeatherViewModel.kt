@@ -135,6 +135,22 @@ class WeatherViewModel(
         }
     }
 
+    fun removeCity(index: Int) {
+        val currentCities = _uiState.value.cities.toMutableList()
+        if (index in currentCities.indices && currentCities.size > 1) {
+            currentCities.removeAt(index)
+            cityRepository.saveCities(currentCities)
+            val newIndex = if (index >= currentCities.size) currentCities.size - 1 else index.coerceAtLeast(0)
+            _uiState.value = _uiState.value.copy(
+                cities = currentCities,
+                selectedCityIndex = newIndex
+            )
+            if (currentCities.isNotEmpty()) {
+                refreshWeather(currentCities[newIndex])
+            }
+        }
+    }
+
     fun nextQuote() {
         val code = _uiState.value.weatherCode
         if (code != null) {

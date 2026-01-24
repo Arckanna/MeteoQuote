@@ -161,6 +161,24 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button?>(R.id.btnFeedback)?.setOnClickListener { openFeedbackForm() }
 
+        findViewById<Button?>(R.id.btnDeleteCity)?.setOnClickListener {
+            val currentIndex = viewModel.uiState.value.selectedCityIndex
+            val cities = viewModel.uiState.value.cities
+            if (cities.size > 1) {
+                AlertDialog.Builder(this)
+                    .setTitle("Supprimer la ville")
+                    .setMessage("Voulez-vous supprimer « ${cities[currentIndex].label} » ?")
+                    .setPositiveButton("Supprimer") { _, _ ->
+                        viewModel.removeCity(currentIndex)
+                        Toast.makeText(this, "Ville supprimée", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Annuler", null)
+                    .show()
+            } else {
+                Toast.makeText(this, "Impossible de supprimer : il doit rester au moins une ville", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         findViewById<Button?>(R.id.btnLocate)?.setOnClickListener {
             ensureLocationPermission { locateAndSelectCity() }
         }
@@ -218,6 +236,9 @@ class MainActivity : AppCompatActivity() {
                 spinner.setSelection(state.selectedCityIndex)
             }
         }
+        
+        // Activer/désactiver le bouton de suppression selon le nombre de villes
+        findViewById<Button?>(R.id.btnDeleteCity)?.isEnabled = state.cities.size > 1
 
         // Gestion du chargement
         if (state.isLoading) {
