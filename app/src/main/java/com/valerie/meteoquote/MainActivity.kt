@@ -53,6 +53,44 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.core.view.WindowInsetsCompat
+import android.graphics.drawable.TransitionDrawable
+import android.animation.ValueAnimator
+import android.animation.ArgbEvaluator
+import android.annotation.SuppressLint
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import android.content.Intent
+import android.net.Uri
+import android.view.View
+import android.content.res.ColorStateList
+import android.util.Log
+import java.net.HttpURLConnection
+import androidx.appcompat.app.AlertDialog
+import android.provider.Settings
+import android.location.Geocoder
+import java.io.IOException
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
+import android.graphics.Typeface
+
+data class City(val label: String, val lat: Double, val lon: Double)
+data class HourlyForecast(val time: LocalDateTime, val temp: Double, val code: Int)
+data class DailyForecast(val date: LocalDate, val tmin: Double, val tmax: Double, val code: Int)
+data class Quote(val text: String, val author: String)
+data class WeatherResult(
+    val current: Pair<Double, Int>,
+    val hourly: List<HourlyForecast>,
+    val daily: List<DailyForecast>,
+    val uvNow: Double,
+    val uvMaxToday: Double,
+    val uvPeakTime: LocalDateTime?,
+    val aqiNow: Int,
+    val aqiMaxToday: Int,
+    val aqiPeakTime: LocalDateTime?
+)
 
 class MainActivity : AppCompatActivity() {
     
@@ -67,6 +105,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cityNamesAdapter: ArrayAdapter<String>
     private lateinit var rootContainer: ViewGroup
     private lateinit var tvAqi: TextView
+    private lateinit var containerRecentChips: LinearLayout
+    private val recentCities = mutableListOf<City>()  // LRU (max 10)
+
     private var tvUv: TextView? = null
     private var currentThemeRes: Int? = null
     private var currentStatusColor: Int? = null
@@ -100,6 +141,17 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        containerRecentChips = findViewById(R.id.containerRecentChips)
+
+// 1) Charger les récents et les afficher
+        loadRecentCities()
+        updateRecentChips()
+
+// 2) Chip "Ma position" → réutilise ton bouton existant
+        findViewById<View>(R.id.chipMyLocation).setOnClickListener {
+            // On déclenche exactement le même flux que ton bouton de localisation
+            findViewById<View?>(R.id.btnLocate)?.performClick()
+        }
 
         // Initialisation du ViewModel
         val factory = WeatherViewModelFactory(application)
@@ -213,18 +265,74 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "Erreur : ${e.message ?: "Impossible d'ajouter la ville"}", Toast.LENGTH_SHORT).show()
                         findViewById<Button>(R.id.btnAddCity).isEnabled = true
                     }
+                    // Sélectionne la ville et rafraîchit
+                    val pos = cityNamesAdapter.getPosition(found.label).coerceAtLeast(0)
+                    spinner.setSelection(pos)
+                    addToRecents(found)
+                    refresh()
                 }
             }
         }
     }
 
-    private fun observeViewModel() {
-        lifecycleScope.launch {
-            viewModel.uiState.collect { state ->
-                updateUI(state)
-            }
-        }
-    }
+    @SuppressLint("DefaultLocale")
+    private fun refresh() {
+        val index = spinner.selectedItemPosition.coerceIn(0, cities.lastIndex)
+        val city = cities[index]
+
+        // État d'attente
+        tvCondition.text = "Chargement…"
+        tvTemp.text = "— °C"
+
+        ioScope.launch {
+            try {
+                val result = fetchFullWeather(city.lat, city.lon)
+                val (temp, code) = result.current
+                val label = wmoToLabel(code)
+
+                withContext(Dispatchers.Main) {
+                    ivIcon.setImageResource(wmoToIconRes(code))
+                    tvCondition.text = label
+                    tvTemp.text = String.format("%.1f °C", temp)
+
+                    applyWeatherTheme(code)
+                    val light = isBgLight(code)
+                    applyContentColorsFor(light)
+                    applyIconScrim(ivIcon, light, 8)
+
+                    lastWeatherCode = code
+                    tvQuote.text = nextQuote(LocalDate.now(), code, advance = false)
+
+                    // UV badge
+                    val (uvLabel, uvColor) = uvCategory(result.uvMaxToday)
+                    val peakTxt = result.uvPeakTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "—"
+                    tvUv?.apply {
+                        setBackgroundResource(R.drawable.bg_uv_chip)
+                        val uvTop = String.format(
+                            Locale.FRANCE, "UV %.1f • pic %.1f à %s",
+                            result.uvNow, result.uvMaxToday, peakTxt
+                        )
+                        val uvBottom = "Risque UV\u202F: ${uvLabel.lowercase(Locale.FRENCH)}"
+                        tvUv?.text = boldLine1SmallLine2(uvTop, uvBottom)
+                        backgroundTintList = ColorStateList.valueOf(uvColor)
+                        setTextColor(Color.WHITE)
+                        visibility = View.VISIBLE
+                    }
+
+                    // AQI (now + pic heure)
+                    val (aqiLabel, aqiColor) = aqiCategoryEU(result.aqiNow)
+                    tvAqi?.let { aqi ->
+                        aqi.setBackgroundResource(R.drawable.bg_uv_chip)
+                        val aqiPeakTxt = result.aqiPeakTime
+                            ?.format(DateTimeFormatter.ofPattern("HH:mm"))
+                            ?: "—"
+                        val aqiTop = "AQI ${result.aqiNow} • pic ${result.aqiMaxToday} à $aqiPeakTxt"
+                        val aqiBottom = "Qualité de l’air\u202F: ${aqiLabel.lowercase(Locale.FRENCH)}"
+                        tvAqi?.text = boldLine1SmallLine2(aqiTop, aqiBottom)
+                        ViewCompat.setBackgroundTintList(aqi, ColorStateList.valueOf(aqiColor))
+                        aqi.setTextColor(Color.WHITE)
+                        aqi.visibility = View.VISIBLE
+                    }
 
     private fun updateUI(state: com.valerie.meteoquote.ui.WeatherUiState) {
         // Mise à jour du spinner si les villes ont changé
@@ -428,6 +536,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun isBgLight(code: Int): Boolean = when (code) {
+        0, 1, 2, 3, 45, 48, 71, 73, 75, 85, 86 -> true
+        else -> false
+    }
+
     private fun applyContentColorsFor(useDarkText: Boolean) {
         val primary = 0xFF111111.toInt()
         val secondary = 0xFF5E5E5E.toInt()
@@ -575,5 +688,147 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Localisation indisponible.", Toast.LENGTH_SHORT).show()
             findViewById<Button?>(R.id.btnLocate)?.isEnabled = true
         }
+    }
+
+    private fun applyLocation(lat: Double, lon: Double) {
+        ioScope.launch {
+            val detected = try {
+                reverseGeocode(lat, lon)
+            } catch (e: Exception) {
+                Log.e("MeteoQuote", "applyLocation/reverse failed", e)
+                null
+            } ?: City("Ma position", lat, lon)
+
+            withContext(Dispatchers.Main) {
+                selectOrInsertCity(detected)
+                refresh()
+                Toast.makeText(this@MainActivity, "Ville détectée : ${detected.label}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** Met à jour le spinner/liste villes : met à jour ou insère la ville détectée, puis persiste. */
+    private fun selectOrInsertCity(city: City) {
+        val count = cityNamesAdapter.count
+        var pos = -1
+        for (i in 0 until count) {
+            val lbl = cityNamesAdapter.getItem(i) ?: continue
+            if (lbl.equals(city.label, ignoreCase = true)) { pos = i; break }
+        }
+
+        if (pos >= 0) {
+            val idx = cities.indexOfFirst { it.label.equals(city.label, ignoreCase = true) }
+            if (idx >= 0) cities[idx] = city.copy(label = cities[idx].label) // garde le même label
+            spinner.setSelection(pos, true)
+        } else {
+            cities.add(0, city)
+            cityNamesAdapter.insert(city.label, 0)
+            spinner.setSelection(0, true)
+        }
+
+        saveCities()
+        addToRecents(city)
+    }
+
+    /** Ajoute une ville en tête de la LRU (max 10), sans doublon (lat/lon). */
+    private fun addToRecents(city: City) {
+        // dédup lat/lon (exacts) ; tu peux raffiner si besoin
+        recentCities.removeAll { it.lat == city.lat && it.lon == city.lon }
+        recentCities.add(0, city)
+        if (recentCities.size > 10) {
+            recentCities.removeAt(recentCities.lastIndex)   // ✅ compat 24
+        }
+        saveRecentCities()
+        updateRecentChips()
+    }
+
+    /** Persistance LRU */
+    private fun saveRecentCities() {
+        val arr = JSONArray()
+        recentCities.forEach { c ->
+            arr.put(JSONObject().apply {
+                put("label", c.label); put("lat", c.lat); put("lon", c.lon)
+            })
+        }
+        getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE)
+            .edit().putString("recent_cities_json", arr.toString()).apply()
+    }
+
+    /** Chargement LRU */
+    private fun loadRecentCities() {
+        val json = getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE)
+            .getString("recent_cities_json", null) ?: return
+        runCatching {
+            val arr = JSONArray(json)
+            recentCities.clear()
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                recentCities.add(City(o.getString("label"), o.getDouble("lat"), o.getDouble("lon")))
+            }
+        }
+    }
+
+    /** Construit les chips récents dynamiquement. */
+    private fun updateRecentChips() {
+        containerRecentChips.removeAllViews()
+
+        // Laisse "Ma position" en premier
+        val locChip = layoutInflater.inflate(R.layout.simple_chip_pill, containerRecentChips, false) as TextView?
+            ?: TextView(this).apply { text = "Ma position" }
+        locChip.id = R.id.chipMyLocation
+        // Si tu veux garder le locChip en premier, on le rajoute tout de suite :
+        containerRecentChips.addView(locChip)
+
+        // Puis les récents
+        recentCities.forEach { city ->
+            val tv = TextView(this).apply {
+                // même rendu que WidgetChipPill
+                setBackgroundResource(R.drawable.bg_uv_chip)
+                setTextColor(Color.WHITE)
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                text = city.label
+                // petite marge à gauche
+                val lp = ViewGroup.MarginLayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                lp.leftMargin = dp(8)
+                layoutParams = lp
+                setOnClickListener {
+                    selectCityFromChip(city)
+                }
+                setOnLongClickListener {
+                    // Appui long : épingler aux favoris (Étape 2), ou retirer des récents :
+                    // recentCities.removeAll { it.lat==city.lat && it.lon==city.lon }; saveRecentCities(); updateRecentChips(); true
+                    false
+                }
+            }
+            containerRecentChips.addView(tv)
+        }
+
+        // Rewire "Ma position" pour éviter de perdre le listener
+        locChip.setOnClickListener {
+            findViewById<View?>(R.id.btnLocate)?.performClick()
+        }
+    }
+
+    /** Sélectionne la ville via le spinner existant (ajoute si absente), puis refresh. */
+    private fun selectCityFromChip(city: City) {
+        ensureCityInSpinner(city)
+        val pos = cityNamesAdapter.getPosition(city.label).coerceAtLeast(0)
+        spinner.setSelection(pos)
+        refresh()
+    }
+
+    /** Garantit que la ville est présente dans le spinner/cities. */
+    private fun ensureCityInSpinner(city: City) {
+        val exists = cities.any { it.lat == city.lat && it.lon == city.lon }
+        if (!exists) {
+            cities.add(city)
+            cityNamesAdapter.add(city.label)
+            saveCities()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        ioScope.cancel()
     }
 }

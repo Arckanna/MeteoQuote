@@ -78,6 +78,30 @@
                 android:layout_marginStart="8dp"/>
 
         </LinearLayout>
+        <!-- Récents + Ma position -->
+        <HorizontalScrollView
+            android:id="@+id/recentChipsScroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:overScrollMode="never"
+            android:scrollbars="none"
+            android:layout_marginTop="12dp">
+
+            <LinearLayout
+                android:id="@+id/containerRecentChips"
+                android:orientation="horizontal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+                <!-- Chip fixe : Ma position -->
+                <TextView
+                    android:id="@+id/chipMyLocation"
+                    style="@style/WidgetChipPill"
+                    android:text="Ma position"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"/>
+            </LinearLayout>
+        </HorizontalScrollView>
 
         <!-- Bloc météo principal -->
         <LinearLayout
