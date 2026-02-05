@@ -60,6 +60,15 @@
                 android:layout_weight="1" />
 
             <Button
+                android:id="@+id/btnDeleteCity"
+                style="@style/WidgetButtonMain"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="🗑️"
+                android:contentDescription="Supprimer la ville"
+                android:layout_marginStart="8dp"/>
+
+            <Button
                 android:id="@+id/btnLocate"
                 style="@style/WidgetButtonMain"
                 android:layout_width="48dp"
