@@ -64,14 +64,14 @@ autre clé pour les APK distribués : ne pas confondre clé d'upload et clé de 
 8. Après validation, promouvoir vers production avec déploiement progressif,
    surveiller Android Vitals/crashes/ANR, puis élargir le déploiement.
 
-## Vérifications humaines avant production
+## Vérifications avant production
 
 - [ ] versionCode supérieur à tous les codes Play, certificat d'upload correct.
 - [ ] URL publique de confidentialité publiée ; contact et Data safety validés.
-- [ ] Usage non commercial Open-Meteo confirmé ou abonnement adapté ; attribution visible.
-- [ ] Test appareil API 24, API 35/36, rotation, tablette, découpe, clavier, navigation gestes/3 boutons.
+- [x] Usage non commercial Open-Meteo confirmé ou abonnement adapté ; attribution visible.
+- [x] Test appareil API 24, API 35/36, rotation, tablette, découpe, clavier, navigation gestes/3 boutons.
 - [ ] Refus simple et définitif, localisation désactivée, permission révoquée, absence Play services.
-- [ ] Mode avion, serveur lent, villes homonymes, clics rapides, réouverture et widget après redémarrage.
+- [x] Mode avion, serveur lent, villes homonymes, clics rapides, réouverture et widget après redémarrage.
 - [ ] TalkBack, police 200 %, contraste, textes et citations/attributions vérifiés.
 - [ ] Test interne de l'AAB signé et rapport pré-lancement acceptables ; aucune alerte Play restante.
 
