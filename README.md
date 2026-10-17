@@ -5,7 +5,7 @@ Recherche de villes (Open-Meteo Geocoding), persistance, **thème dynamique** (c
 
 [![Android CI](https://github.com/Arckanna/MeteoQuote/actions/workflows/android.yml/badge.svg)](https://github.com/Arckanna/MeteoQuote/actions/workflows/android.yml)
 
-<img src="art/screenshot_main.jpg" alt="Capture d'écran" width="360"/>
+<img src="art/screenshot_main.jpg" alt="Capture d'écran" width="1080"/>
 
 ## Fonctionnalités
 - Météo **actuelle**, **24 h** (heure par heure), **7 jours** (min/max)
