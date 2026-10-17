@@ -5,14 +5,15 @@ plugins {
 
 android {
     namespace = "com.valerie.meteoquote"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.valerie.meteoquote"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 15
-        versionName = "6.6"
+        targetSdk = 36
+        versionCode = 16
+        versionName = "6.7"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -43,28 +44,29 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    testOptions.unitTests.isIncludeAndroidResources = true
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.android.material:material:1.12.0")
-    implementation("com.google.android.gms:play-services-location:21.3.0")
-    implementation("androidx.activity:activity-ktx:1.9.2")
-    // Coroutines pour l'appel réseau en arrière-plan
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    // Simple JSON
-    implementation("org.json:json:20240303")
-    // MVVM - ViewModel et Lifecycle
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.7")
-
-    // Tests
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
-    testImplementation("io.mockk:mockk:1.13.10")
-    testImplementation("androidx.arch.core:core-testing:2.2.0")
-    testImplementation("androidx.test:core:1.6.1") // Pour ApplicationProvider
+    coreLibraryDesugaring(libs.desugar)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.material)
+    implementation(libs.location)
+    implementation(libs.androidx.activity)
+    implementation(libs.androidx.constraintlayout)
+    implementation(libs.coroutines.android)
+    implementation(libs.lifecycle.viewmodel)
+    implementation(libs.lifecycle.runtime)
+    implementation(libs.okhttp)
+    implementation(libs.work)
+    testImplementation(libs.junit)
+    testImplementation(libs.json)
+    testImplementation(libs.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.mockwebserver)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
 }
