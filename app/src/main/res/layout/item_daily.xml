@@ -1,0 +1,6 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="8dp" android:paddingBottom="8dp" android:baselineAligned="false">
+    <TextView android:id="@+id/dayDate" style="@style/TextBody" android:layout_width="0dp" android:layout_weight="1.4" android:layout_height="wrap_content"/>
+    <ImageView android:id="@+id/dayIcon" android:layout_width="40dp" android:layout_height="40dp" android:importantForAccessibility="no"/>
+    <TextView android:id="@+id/dayMin" style="@style/TextSecondary" android:gravity="end" android:fontFeatureSettings="tnum" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+    <TextView android:id="@+id/dayMax" style="@style/TextBody" android:gravity="end" android:fontFeatureSettings="tnum" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+</LinearLayout>

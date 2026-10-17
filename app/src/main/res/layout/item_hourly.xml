@@ -1,0 +1,5 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:padding="8dp" android:background="@drawable/bg_surface">
+    <TextView android:id="@+id/hourTime" style="@style/TextSecondary" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+    <ImageView android:id="@+id/hourIcon" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginTop="8dp" android:layout_marginBottom="8dp" android:importantForAccessibility="no"/>
+    <TextView android:id="@+id/hourTemp" style="@style/TextBody" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+</LinearLayout>

@@ -1,23 +1,14 @@
 package com.valerie.meteoquote
 
 import android.Manifest
-import android.animation.ArgbEvaluator
-import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.TransitionDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.RelativeSizeSpan
-import android.text.style.StyleSpan
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
@@ -70,11 +61,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var containerRecentChips: LinearLayout
     private val recentCities = mutableListOf<City>()  // LRU (max 10)
 
-    private var tvUv: TextView? = null
-    private var currentThemeRes: Int? = null
-    private var currentStatusColor: Int? = null
-
-
+    private lateinit var tvUv: TextView
 
     // --- Permissions localisation ---
     private val locationPermsLauncher = registerForActivityResult(
@@ -112,39 +99,33 @@ class MainActivity : AppCompatActivity() {
         loadRecentCities()
         updateRecentChips()
 
-// 2) Chip "Ma position" → réutilise ton bouton existant
-        findViewById<View>(R.id.chipMyLocation).setOnClickListener {
-            // On déclenche exactement le même flux que ton bouton de localisation
-            findViewById<View>(R.id.btnLocate)?.performClick()
-        }
-
         // Initialisation du ViewModel
         val factory = WeatherViewModelFactory(application)
         viewModel = ViewModelProvider(this, factory)[WeatherViewModel::class.java]
 
-        tvUv = findViewById(R.id.tvUv)
+        tvUv = findViewById<ViewGroup>(R.id.uvCard).findViewById(R.id.metricValue)
         rootContainer = findViewById(R.id.rootContainer)
         spinner = findViewById(R.id.spinnerCities)
         ivIcon = findViewById(R.id.ivIcon)
         tvCondition = findViewById(R.id.tvCondition)
         tvTemp = findViewById(R.id.tvTemp)
         tvQuote = findViewById(R.id.tvQuote)
-        tvAqi = findViewById(R.id.tvAqi)
+        tvAqi = findViewById<ViewGroup>(R.id.aqiCard).findViewById(R.id.metricValue)
         containerHourly = findViewById(R.id.containerHourly)
         containerDaily = findViewById(R.id.containerDaily)
         forecastRenderer = com.valerie.meteoquote.ui.ForecastRenderer(this, containerHourly, containerDaily)
 
-        val content = rootContainer.parent as View
+        val content = rootContainer.parent.parent as View
         ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
             v.setPadding(safe.left, safe.top, safe.right, safe.bottom)
             insets
         }
         ViewCompat.requestApplyInsets(content)
+        listOf(R.id.tvHourlyTitle, R.id.tvDailyTitle, R.id.tvQuoteTitle).forEach { ViewCompat.setAccessibilityHeading(findViewById(it), true) }
         setupSpinner()
         setupButtons()
         observeViewModel()
-
 
     }
 
@@ -152,9 +133,10 @@ class MainActivity : AppCompatActivity() {
         viewModel.uiState.value.cities.let { cities ->
             cityNamesAdapter = ArrayAdapter(
                 this,
-                android.R.layout.simple_spinner_dropdown_item,
+                R.layout.item_city,
                 cities.map { it.label }.toMutableList()
             )
+            cityNamesAdapter.setDropDownViewResource(R.layout.item_city_dropdown)
             spinner.adapter = cityNamesAdapter
             if (cities.isNotEmpty()) {
                 spinner.setSelection(viewModel.uiState.value.selectedCityIndex)
@@ -258,6 +240,7 @@ class MainActivity : AppCompatActivity() {
             cityNamesAdapter.clear()
             cityNamesAdapter.addAll(labels)
         }
+        spinner.contentDescription = "Ville sélectionnée : " + labels.getOrNull(state.selectedCityIndex).orEmpty()
         if (spinner.selectedItemPosition != state.selectedCityIndex) spinner.setSelection(state.selectedCityIndex)
         findViewById<Button>(R.id.btnNewQuote).isEnabled = !state.isLoading && state.error == null
         // Activer/désactiver le bouton de suppression selon le nombre de villes
@@ -270,11 +253,11 @@ class MainActivity : AppCompatActivity() {
         } ?: ""
         // Gestion du chargement
         if (state.isLoading) {
-            tvQuote.text = "—"
+            renderQuote("—")
             containerHourly.removeAllViews()
             containerDaily.removeAllViews()
-            tvUv?.visibility = View.GONE
-            tvAqi.visibility = View.GONE
+            findViewById<View>(R.id.uvCard).visibility = View.GONE
+            findViewById<View>(R.id.aqiCard).visibility = View.GONE
             tvCondition.text = "Chargement…"
             tvTemp.text = "— °C"
             return
@@ -288,16 +271,17 @@ class MainActivity : AppCompatActivity() {
                 error.contains("Pas de connexion", ignoreCase = true) -> "Pas de connexion internet"
                 error.contains("Délai", ignoreCase = true) -> "Connexion lente ou indisponible"
                 error.contains("réseau", ignoreCase = true) -> "Erreur réseau. Vérifiez votre connexion."
-                else -> "Erreur : $error"
+                else -> "Météo indisponible. Réessayez dans un instant."
             }
-            tvQuote.text = "—"
+            renderQuote("—")
+            applyWeatherTheme(-1)
             tvCondition.text = errorMessage
             tvTemp.text = "— °C"
             containerHourly.removeAllViews()
             containerDaily.removeAllViews()
             // Masquer les badges UV et AQI en cas d'erreur
-            tvUv?.visibility = View.GONE
-            tvAqi?.visibility = View.GONE
+            findViewById<View>(R.id.uvCard).visibility = View.GONE
+            findViewById<View>(R.id.aqiCard).visibility = View.GONE
             return
         }
 
@@ -311,34 +295,19 @@ class MainActivity : AppCompatActivity() {
 
                 applyWeatherTheme(code)
                 val light = true
-                applyContentColorsFor(light)
-                applyIconScrim(ivIcon, light, 8)
+                applyContentColors()
+                ivIcon.background = null
 
-                // UV badge
-                tvUv?.apply {
-                    setBackgroundResource(R.drawable.bg_uv_chip)
-                    val uvTop = String.format(
-                        Locale.FRANCE, "UV %.1f • pic %.1f à %s",
-                        state.uvNow, state.uvMaxToday, state.uvPeakTime ?: "—"
-                    )
-                    val uvBottom = "Risque UV\u202F: ${state.uvLabel.lowercase(Locale.FRENCH)}"
-                    text = boldLine1SmallLine2(uvTop, uvBottom)
-                    backgroundTintList = ColorStateList.valueOf(state.uvColor)
-                    setTextColor(if (androidx.core.graphics.ColorUtils.calculateLuminance(state.uvColor) > 0.4) Color.BLACK else Color.WHITE)
-                    visibility = if (state.uvMaxToday >= 0 && state.uvNow >= 0) View.VISIBLE else View.GONE
-                }
-
-                // AQI
-                tvAqi?.let { aqi ->
-                    aqi.setBackgroundResource(R.drawable.bg_uv_chip)
-                    val aqiTop = if (state.aqiNow < 0) "AQI indisponible" else "AQI ${state.aqiNow} • pic ${state.aqiMaxToday} à ${state.aqiPeakTime ?: "—"}"
-                    val aqiBottom = "Qualité de l'air\u202F: ${state.aqiLabel.lowercase(Locale.FRENCH)}"
-                    aqi.text = boldLine1SmallLine2(aqiTop, aqiBottom)
-                    ViewCompat.setBackgroundTintList(aqi, ColorStateList.valueOf(state.aqiColor))
-                    aqi.setTextColor(if (androidx.core.graphics.ColorUtils.calculateLuminance(state.aqiColor) > 0.4) Color.BLACK else Color.WHITE)
-                    aqi.visibility = View.VISIBLE
-                }
-
+                renderMetric(tvUv, "Indice UV",
+                    if (state.uvNow >= 0) String.format(Locale.FRANCE, "%.1f", state.uvNow) else "—",
+                    if (state.uvMaxToday >= 0) "Risque au pic : " + state.uvLabel.lowercase(Locale.FRENCH) else "Indisponible",
+                    if (state.uvMaxToday >= 0) String.format(Locale.FRANCE, "Pic %.1f à %s", state.uvMaxToday, state.uvPeakTime ?: "—") else "Pic indisponible",
+                    state.uvColor)
+                renderMetric(tvAqi, "Air · AQI européen",
+                    if (state.aqiNow >= 0) state.aqiNow.toString() else "—",
+                    if (state.aqiNow >= 0) state.aqiLabel else "Indisponible",
+                    if (state.aqiMaxToday >= 0) "Pic ${state.aqiMaxToday} à ${state.aqiPeakTime ?: "—"}" else "Pic indisponible",
+                    state.aqiColor)
                 // Rendus
                 forecastRenderer.renderHourly(state.hourlyForecasts, light)
                 forecastRenderer.renderDaily(state.dailyForecasts, light)
@@ -346,49 +315,61 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Citation
-        tvQuote.text = state.quote
+        renderQuote(state.quote)
     }
 
-    private fun boldLine1SmallLine2(top: String, bottom: String) =
-        SpannableStringBuilder()
-            .append(top, StyleSpan(Typeface.BOLD), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            .append("\n")
-            .append(bottom, RelativeSizeSpan(0.92f), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-
-    @Suppress("DEPRECATION") // Status bar color is used only on API 34 and below.
-    private fun applyWeatherTheme(code: Int, durationMs: Long = 350L) {
-        val newBgRes = WeatherUtils.themeDrawableRes(code)
-        val newStatus = ContextCompat.getColor(this, WeatherUtils.statusColorRes(code))
-
-        val oldBgRes = currentThemeRes
-        if (oldBgRes == null) {
-            rootContainer.setBackgroundResource(newBgRes)
-        } else if (oldBgRes != newBgRes) {
-            val old = ContextCompat.getDrawable(this, oldBgRes)!!.mutate()
-            val now = ContextCompat.getDrawable(this, newBgRes)!!.mutate()
-            val td = TransitionDrawable(arrayOf(old, now)).apply { isCrossFadeEnabled = true }
-            rootContainer.background = td
-            td.startTransition(durationMs.toInt())
+    private fun renderMetric(view: TextView, title: String, value: String, level: String, peak: String, color: Int) {
+        val panel = view.parent as LinearLayout
+        panel.findViewById<TextView>(R.id.metricTitle).text = title
+        view.text = value
+        panel.findViewById<TextView>(R.id.metricLevel).text = level
+        panel.findViewById<TextView>(R.id.metricPeak).text = peak
+        panel.visibility = View.VISIBLE
+        panel.background = GradientDrawable().apply {
+            cornerRadius = resources.getDimension(R.dimen.card_radius)
+            setColor(androidx.core.graphics.ColorUtils.blendARGB(Color.WHITE, color, 0.10f))
+            setStroke(dp(1), androidx.core.graphics.ColorUtils.blendARGB(Color.WHITE, color, 0.35f))
         }
-        currentThemeRes = newBgRes
-
-        // Barre de statut animée uniquement ≤ API 34 (Android 14 et moins)
+        view.setTextColor(0xFF203A43.toInt())
+        view.visibility = View.VISIBLE
+    }
+    @Suppress("DEPRECATION")
+    private fun applyWeatherTheme(code: Int) {
+        val (tint, mood) = when (code) {
+            0 -> 0xFFFFF0D7.toInt() to "Quelques mots sous un ciel clair"
+            1, 2, 3 -> 0xFFE7EFF2.toInt() to "Quelques mots au fil des nuages"
+            45, 48 -> 0xFFEBEEEB.toInt() to "Quelques mots dans la brume"
+            71, 73, 75, 77, 85, 86 -> 0xFFE7F2F4.toInt() to "Quelques mots dans le calme de la neige"
+            95, 96, 99 -> 0xFFEEEBF4.toInt() to "Quelques mots à travers l’orage"
+            51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> 0xFFE6EEF7.toInt() to "Quelques mots au rythme de la pluie"
+            else -> 0xFFEBEEEB.toInt() to "À l’humeur du ciel"
+        }
+        findViewById<View>(R.id.quoteBlock).background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(tint, 0xFFF6F8F7.toInt())
+        )
+        findViewById<TextView>(R.id.tvQuoteMood).text = mood
+        findViewById<View>(R.id.weatherBlock).background = GradientDrawable().apply {
+            cornerRadius = resources.getDimension(R.dimen.card_radius)
+            setColor(androidx.core.graphics.ColorUtils.blendARGB(Color.WHITE, tint, 0.5f))
+        }
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            val from = currentStatusColor ?: newStatus
-            ValueAnimator.ofObject(ArgbEvaluator(), from, newStatus).apply {
-                duration = durationMs
-                addUpdateListener { anim -> window.statusBarColor = anim.animatedValue as Int }
-                start()
-            }
-            currentStatusColor = newStatus
+            window.statusBarColor = 0xFFF6F8F7.toInt()
         }
     }
 
+    private fun renderQuote(formatted: String) {
+        val quote = com.valerie.meteoquote.ui.QuotePresentation.from(formatted)
+        tvQuote.text = quote.text
+        findViewById<TextView>(R.id.tvQuoteAuthor).apply {
+            text = quote.author?.let { "— $it" }.orEmpty()
+            visibility = if (quote.author == null) View.GONE else View.VISIBLE
+        }
+    }
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-    private fun applyContentColorsFor(useDarkText: Boolean) {
-        val primary = 0xFF111111.toInt()
-        val secondary = 0xFF5E5E5E.toInt()
+    private fun applyContentColors() {
+        val primary = 0xFF203A43.toInt()
+        val secondary = 0xFF52646B.toInt()
 
         tvCondition.setTextColor(primary)
         tvTemp.setTextColor(primary)
@@ -405,18 +386,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         (spinner.selectedView as? TextView)?.setTextColor(primary)
-    }
-
-    private fun pad(v: Int) = (v * resources.displayMetrics.density).toInt()
-
-    private fun applyIconScrim(iv: ImageView, useDarkText: Boolean, paddingDp: Int) {
-        val color = if (useDarkText) 0x33000000 else 0xB3FFFFFF.toInt()
-        val bg = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(color)
-        }
-        iv.background = bg
-        iv.setPadding(pad(paddingDp), pad(paddingDp), pad(paddingDp), pad(paddingDp))
     }
 
     private fun appInfo(): Triple<String, String, Int> {
@@ -563,22 +532,17 @@ class MainActivity : AppCompatActivity() {
     /** Construit les chips récents dynamiquement. */
     private fun updateRecentChips() {
         containerRecentChips.removeAllViews()
-
-        // Laisse "Ma position" en premier
-        val locChip = layoutInflater.inflate(R.layout.simple_chip_pill, containerRecentChips, false) as TextView?
-            ?: TextView(this).apply { text = "Ma position" }
-        locChip.id = R.id.chipMyLocation
-        locChip.text = "Ma position"
-        // Si tu veux garder le locChip en premier, on le rajoute tout de suite :
-        containerRecentChips.addView(locChip)
+        findViewById<View>(R.id.recentChipsScroll).visibility = if (recentCities.isEmpty()) View.GONE else View.VISIBLE
 
         // Puis les récents
         recentCities.forEach { city ->
             val tv = TextView(this).apply {
                 // même rendu que WidgetChipPill
-                setBackgroundResource(R.drawable.bg_uv_chip)
-                setTextColor(Color.WHITE)
+                setBackgroundResource(R.drawable.bg_surface)
+                setTextColor(0xFF315E6B.toInt())
                 setPadding(dp(12), dp(6), dp(12), dp(6))
+                minimumHeight = dp(48)
+                gravity = android.view.Gravity.CENTER_VERTICAL
                 text = city.label
                 // petite marge à gauche
                 val lp = ViewGroup.MarginLayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -596,10 +560,6 @@ class MainActivity : AppCompatActivity() {
             containerRecentChips.addView(tv)
         }
 
-        // Rewire "Ma position" pour éviter de perdre le listener
-        locChip.setOnClickListener {
-            findViewById<View>(R.id.btnLocate)?.performClick()
-        }
     }
 
     private fun selectCityFromChip(city: City) {
