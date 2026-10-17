@@ -10,7 +10,6 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.TransitionDrawable
-import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -19,7 +18,6 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
-import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
@@ -38,12 +36,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
 import com.valerie.meteoquote.data.CityRepository
-import com.valerie.meteoquote.data.QuoteRepository
-import com.valerie.meteoquote.data.WeatherRepository
 import com.valerie.meteoquote.data.model.City
 import com.valerie.meteoquote.ui.WeatherViewModel
 import com.valerie.meteoquote.ui.WeatherViewModelFactory
@@ -53,47 +46,16 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import androidx.core.view.WindowInsetsCompat
-import android.graphics.drawable.TransitionDrawable
-import android.animation.ValueAnimator
-import android.animation.ArgbEvaluator
-import android.annotation.SuppressLint
-import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
-import android.content.Intent
-import android.net.Uri
-import android.view.View
-import android.content.res.ColorStateList
-import android.util.Log
-import java.net.HttpURLConnection
-import androidx.appcompat.app.AlertDialog
-import android.provider.Settings
-import android.location.Geocoder
-import java.io.IOException
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.RelativeSizeSpan
-import android.text.style.StyleSpan
-import android.graphics.Typeface
-
-data class City(val label: String, val lat: Double, val lon: Double)
-data class HourlyForecast(val time: LocalDateTime, val temp: Double, val code: Int)
-data class DailyForecast(val date: LocalDate, val tmin: Double, val tmax: Double, val code: Int)
-data class Quote(val text: String, val author: String)
-data class WeatherResult(
-    val current: Pair<Double, Int>,
-    val hourly: List<HourlyForecast>,
-    val daily: List<DailyForecast>,
-    val uvNow: Double,
-    val uvMaxToday: Double,
-    val uvPeakTime: LocalDateTime?,
-    val aqiNow: Int,
-    val aqiMaxToday: Int,
-    val aqiPeakTime: LocalDateTime?
-)
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.CancellationException
 
 class MainActivity : AppCompatActivity() {
     
+    private lateinit var forecastRenderer: com.valerie.meteoquote.ui.ForecastRenderer
     private lateinit var viewModel: WeatherViewModel
     private lateinit var spinner: Spinner
     private lateinit var ivIcon: ImageView
@@ -111,21 +73,19 @@ class MainActivity : AppCompatActivity() {
     private var tvUv: TextView? = null
     private var currentThemeRes: Int? = null
     private var currentStatusColor: Int? = null
-    private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
-    private var suppressNextRefresh = true
+
+
 
     // --- Permissions localisation ---
     private val locationPermsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
-        val granted = (perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true) ||
-                (perms[Manifest.permission.ACCESS_FINE_LOCATION] == true)
+        val granted = perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) {
             locateAndSelectCity()
         } else {
-            val showRationaleFine = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
             val showRationaleCoarse = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)
-            if (!showRationaleFine && !showRationaleCoarse) {
+            if (!showRationaleCoarse) {
                 AlertDialog.Builder(this)
                     .setTitle("Permission requise")
                     .setMessage("Active la localisation dans les paramètres pour utiliser « Ma position ».")
@@ -140,7 +100,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
         containerRecentChips = findViewById(R.id.containerRecentChips)
 
 // 1) Charger les récents et les afficher
@@ -150,7 +115,7 @@ class MainActivity : AppCompatActivity() {
 // 2) Chip "Ma position" → réutilise ton bouton existant
         findViewById<View>(R.id.chipMyLocation).setOnClickListener {
             // On déclenche exactement le même flux que ton bouton de localisation
-            findViewById<View?>(R.id.btnLocate)?.performClick()
+            findViewById<View>(R.id.btnLocate)?.performClick()
         }
 
         // Initialisation du ViewModel
@@ -167,18 +132,20 @@ class MainActivity : AppCompatActivity() {
         tvAqi = findViewById(R.id.tvAqi)
         containerHourly = findViewById(R.id.containerHourly)
         containerDaily = findViewById(R.id.containerDaily)
+        forecastRenderer = com.valerie.meteoquote.ui.ForecastRenderer(this, containerHourly, containerDaily)
 
-        ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { v, insets ->
-            val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(v.paddingLeft, sys.top, v.paddingRight, sys.bottom)
+        val content = rootContainer.parent as View
+        ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+            val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
+            v.setPadding(safe.left, safe.top, safe.right, safe.bottom)
             insets
         }
-
+        ViewCompat.requestApplyInsets(content)
         setupSpinner()
         setupButtons()
         observeViewModel()
 
-        rootContainer.post { ensureLocationPermission { } }
+
     }
 
     private fun setupSpinner() {
@@ -196,24 +163,27 @@ class MainActivity : AppCompatActivity() {
 
         spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>, view: android.view.View?, position: Int, id: Long) {
-                if (suppressNextRefresh) {
-                    suppressNextRefresh = false
-                    return
-                }
-                viewModel.selectCity(position)
+                if (position != viewModel.uiState.value.selectedCityIndex) viewModel.selectCity(position)
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>) {}
         }
     }
 
     private fun setupButtons() {
+        findViewById<Button>(R.id.btnRefresh).setOnClickListener { viewModel.refreshWeather() }
+        findViewById<Button>(R.id.btnPrivacy).setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.privacy_title)
+                .setMessage(getString(R.string.privacy_notice))
+                .setPositiveButton("Fermer", null).show()
+        }
         findViewById<Button>(R.id.btnNewQuote).setOnClickListener {
             viewModel.nextQuote()
         }
 
-        findViewById<Button?>(R.id.btnFeedback)?.setOnClickListener { openFeedbackForm() }
+        findViewById<Button>(R.id.btnFeedback)?.setOnClickListener { openFeedbackForm() }
 
-        findViewById<Button?>(R.id.btnDeleteCity)?.setOnClickListener {
+        findViewById<Button>(R.id.btnDeleteCity)?.setOnClickListener {
             val currentIndex = viewModel.uiState.value.selectedCityIndex
             val cities = viewModel.uiState.value.cities
             if (cities.size > 1) {
@@ -231,7 +201,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        findViewById<Button?>(R.id.btnLocate)?.setOnClickListener {
+        findViewById<Button>(R.id.btnLocate)?.setOnClickListener {
             ensureLocationPermission { locateAndSelectCity() }
         }
 
@@ -255,101 +225,56 @@ class MainActivity : AppCompatActivity() {
                             Toast.makeText(this@MainActivity, "Ville introuvable", Toast.LENGTH_SHORT).show()
                         } else {
                             viewModel.addCity(found)
+                            addToRecents(found)
                             etCitySearch.text.clear()
                             Toast.makeText(this@MainActivity, "Ville ajoutée : ${found.label}", Toast.LENGTH_SHORT).show()
                         }
                         findViewById<Button>(R.id.btnAddCity).isEnabled = true
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@MainActivity, "Erreur : ${e.message ?: "Impossible d'ajouter la ville"}", Toast.LENGTH_SHORT).show()
                         findViewById<Button>(R.id.btnAddCity).isEnabled = true
                     }
-                    // Sélectionne la ville et rafraîchit
-                    val pos = cityNamesAdapter.getPosition(found.label).coerceAtLeast(0)
-                    spinner.setSelection(pos)
-                    addToRecents(found)
-                    refresh()
+
                 }
             }
         }
     }
 
-    @SuppressLint("DefaultLocale")
-    private fun refresh() {
-        val index = spinner.selectedItemPosition.coerceIn(0, cities.lastIndex)
-        val city = cities[index]
-
-        // État d'attente
-        tvCondition.text = "Chargement…"
-        tvTemp.text = "— °C"
-
-        ioScope.launch {
-            try {
-                val result = fetchFullWeather(city.lat, city.lon)
-                val (temp, code) = result.current
-                val label = wmoToLabel(code)
-
-                withContext(Dispatchers.Main) {
-                    ivIcon.setImageResource(wmoToIconRes(code))
-                    tvCondition.text = label
-                    tvTemp.text = String.format("%.1f °C", temp)
-
-                    applyWeatherTheme(code)
-                    val light = isBgLight(code)
-                    applyContentColorsFor(light)
-                    applyIconScrim(ivIcon, light, 8)
-
-                    lastWeatherCode = code
-                    tvQuote.text = nextQuote(LocalDate.now(), code, advance = false)
-
-                    // UV badge
-                    val (uvLabel, uvColor) = uvCategory(result.uvMaxToday)
-                    val peakTxt = result.uvPeakTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "—"
-                    tvUv?.apply {
-                        setBackgroundResource(R.drawable.bg_uv_chip)
-                        val uvTop = String.format(
-                            Locale.FRANCE, "UV %.1f • pic %.1f à %s",
-                            result.uvNow, result.uvMaxToday, peakTxt
-                        )
-                        val uvBottom = "Risque UV\u202F: ${uvLabel.lowercase(Locale.FRENCH)}"
-                        tvUv?.text = boldLine1SmallLine2(uvTop, uvBottom)
-                        backgroundTintList = ColorStateList.valueOf(uvColor)
-                        setTextColor(Color.WHITE)
-                        visibility = View.VISIBLE
-                    }
-
-                    // AQI (now + pic heure)
-                    val (aqiLabel, aqiColor) = aqiCategoryEU(result.aqiNow)
-                    tvAqi?.let { aqi ->
-                        aqi.setBackgroundResource(R.drawable.bg_uv_chip)
-                        val aqiPeakTxt = result.aqiPeakTime
-                            ?.format(DateTimeFormatter.ofPattern("HH:mm"))
-                            ?: "—"
-                        val aqiTop = "AQI ${result.aqiNow} • pic ${result.aqiMaxToday} à $aqiPeakTxt"
-                        val aqiBottom = "Qualité de l’air\u202F: ${aqiLabel.lowercase(Locale.FRENCH)}"
-                        tvAqi?.text = boldLine1SmallLine2(aqiTop, aqiBottom)
-                        ViewCompat.setBackgroundTintList(aqi, ColorStateList.valueOf(aqiColor))
-                        aqi.setTextColor(Color.WHITE)
-                        aqi.visibility = View.VISIBLE
-                    }
-
-    private fun updateUI(state: com.valerie.meteoquote.ui.WeatherUiState) {
-        // Mise à jour du spinner si les villes ont changé
-        if (state.cities.size != cityNamesAdapter.count) {
-            cityNamesAdapter.clear()
-            cityNamesAdapter.addAll(state.cities.map { it.label })
-            if (state.selectedCityIndex in state.cities.indices) {
-                suppressNextRefresh = true
-                spinner.setSelection(state.selectedCityIndex)
+    private fun observeViewModel() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { updateUI(it) }
             }
         }
-        
-        // Activer/désactiver le bouton de suppression selon le nombre de villes
-        findViewById<Button?>(R.id.btnDeleteCity)?.isEnabled = state.cities.size > 1
+    }
 
+    private fun updateUI(state: com.valerie.meteoquote.ui.WeatherUiState) {
+        val labels = state.cities.map { it.label }
+        if ((0 until cityNamesAdapter.count).map { cityNamesAdapter.getItem(it) } != labels) {
+            cityNamesAdapter.clear()
+            cityNamesAdapter.addAll(labels)
+        }
+        if (spinner.selectedItemPosition != state.selectedCityIndex) spinner.setSelection(state.selectedCityIndex)
+        findViewById<Button>(R.id.btnNewQuote).isEnabled = !state.isLoading && state.error == null
+        // Activer/désactiver le bouton de suppression selon le nombre de villes
+        findViewById<Button>(R.id.btnDeleteCity)?.isEnabled = state.cities.size > 1
+
+        findViewById<Button>(R.id.btnRefresh).isEnabled = !state.isLoading
+        findViewById<TextView>(R.id.tvUpdated).text = if (state.isLoading || state.error != null) "" else state.updatedAt?.let {
+            "Actualisé le " + DateTimeFormatter.ofPattern("dd/MM HH:mm", Locale.FRANCE)
+                .withZone(java.time.ZoneId.systemDefault()).format(it)
+        } ?: ""
         // Gestion du chargement
         if (state.isLoading) {
+            tvQuote.text = "—"
+            containerHourly.removeAllViews()
+            containerDaily.removeAllViews()
+            tvUv?.visibility = View.GONE
+            tvAqi.visibility = View.GONE
             tvCondition.text = "Chargement…"
             tvTemp.text = "— °C"
             return
@@ -365,6 +290,7 @@ class MainActivity : AppCompatActivity() {
                 error.contains("réseau", ignoreCase = true) -> "Erreur réseau. Vérifiez votre connexion."
                 else -> "Erreur : $error"
             }
+            tvQuote.text = "—"
             tvCondition.text = errorMessage
             tvTemp.text = "— °C"
             containerHourly.removeAllViews()
@@ -380,10 +306,11 @@ class MainActivity : AppCompatActivity() {
             state.weatherCode?.let { code ->
                 ivIcon.setImageResource(WeatherUtils.wmoToIconRes(code))
                 tvCondition.text = state.condition
-                tvTemp.text = String.format("%.1f °C", temp)
+                ivIcon.contentDescription = state.condition
+                tvTemp.text = String.format(Locale.FRANCE, "%.1f °C", temp)
 
                 applyWeatherTheme(code)
-                val light = WeatherUtils.isBgLight(code)
+                val light = true
                 applyContentColorsFor(light)
                 applyIconScrim(ivIcon, light, 8)
 
@@ -397,24 +324,24 @@ class MainActivity : AppCompatActivity() {
                     val uvBottom = "Risque UV\u202F: ${state.uvLabel.lowercase(Locale.FRENCH)}"
                     text = boldLine1SmallLine2(uvTop, uvBottom)
                     backgroundTintList = ColorStateList.valueOf(state.uvColor)
-                    setTextColor(Color.WHITE)
-                    visibility = View.VISIBLE
+                    setTextColor(if (androidx.core.graphics.ColorUtils.calculateLuminance(state.uvColor) > 0.4) Color.BLACK else Color.WHITE)
+                    visibility = if (state.uvMaxToday >= 0 && state.uvNow >= 0) View.VISIBLE else View.GONE
                 }
 
                 // AQI
                 tvAqi?.let { aqi ->
                     aqi.setBackgroundResource(R.drawable.bg_uv_chip)
-                    val aqiTop = "AQI ${state.aqiNow} • pic ${state.aqiMaxToday} à ${state.aqiPeakTime ?: "—"}"
+                    val aqiTop = if (state.aqiNow < 0) "AQI indisponible" else "AQI ${state.aqiNow} • pic ${state.aqiMaxToday} à ${state.aqiPeakTime ?: "—"}"
                     val aqiBottom = "Qualité de l'air\u202F: ${state.aqiLabel.lowercase(Locale.FRENCH)}"
                     aqi.text = boldLine1SmallLine2(aqiTop, aqiBottom)
                     ViewCompat.setBackgroundTintList(aqi, ColorStateList.valueOf(state.aqiColor))
-                    aqi.setTextColor(Color.WHITE)
+                    aqi.setTextColor(if (androidx.core.graphics.ColorUtils.calculateLuminance(state.aqiColor) > 0.4) Color.BLACK else Color.WHITE)
                     aqi.visibility = View.VISIBLE
                 }
 
                 // Rendus
-                renderHourly(state.hourlyForecasts, light)
-                renderDaily(state.dailyForecasts, light)
+                forecastRenderer.renderHourly(state.hourlyForecasts, light)
+                forecastRenderer.renderDaily(state.dailyForecasts, light)
             }
         }
 
@@ -428,6 +355,7 @@ class MainActivity : AppCompatActivity() {
             .append("\n")
             .append(bottom, RelativeSizeSpan(0.92f), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
 
+    @Suppress("DEPRECATION") // Status bar color is used only on API 34 and below.
     private fun applyWeatherTheme(code: Int, durationMs: Long = 350L) {
         val newBgRes = WeatherUtils.themeDrawableRes(code)
         val newStatus = ContextCompat.getColor(this, WeatherUtils.statusColorRes(code))
@@ -458,89 +386,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-    private fun renderHourly(items: List<com.valerie.meteoquote.data.model.HourlyForecast>, useDarkText: Boolean) {
-        containerHourly.removeAllViews()
-        val fmtHour = DateTimeFormatter.ofPattern("HH'h'", Locale.getDefault())
-        val textColor = if (useDarkText) 0xFF111111.toInt() else Color.WHITE
-
-        items.forEach { h ->
-            val col = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { rightMargin = dp(12) }
-            }
-
-            val iv = ImageView(this).apply {
-                setImageResource(WeatherUtils.wmoToIconRes(h.code))
-                layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
-                contentDescription = WeatherUtils.wmoToLabel(h.code)
-            }
-            applyIconScrim(iv, useDarkText, 6)
-
-            val tvT = TextView(this).apply {
-                text = String.format(Locale.getDefault(), "%.0f°", h.temp)
-                textSize = 16f
-                setTextColor(textColor)
-            }
-            val tvH = TextView(this).apply {
-                text = h.time.format(fmtHour)
-                textSize = 12f
-                setTextColor(textColor)
-            }
-
-            col.addView(iv); col.addView(tvT); col.addView(tvH)
-            containerHourly.addView(col)
-        }
-    }
-
-    private fun renderDaily(items: List<com.valerie.meteoquote.data.model.DailyForecast>, useDarkText: Boolean) {
-        containerDaily.removeAllViews()
-        val fmtDay = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
-        val textColor = if (useDarkText) 0xFF111111.toInt() else Color.WHITE
-
-        items.forEach { d ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = dp(6) }
-                setPadding(0, dp(6), 0, dp(6))
-            }
-
-            val tvDate = TextView(this).apply {
-                text = d.date.format(fmtDay)
-                textSize = 14f
-                setTextColor(textColor)
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            val iv = ImageView(this).apply {
-                setImageResource(WeatherUtils.wmoToIconRes(d.code))
-                layoutParams = LinearLayout.LayoutParams(dp(28), dp(28)).apply { rightMargin = dp(12) }
-                contentDescription = WeatherUtils.wmoToLabel(d.code)
-            }
-            applyIconScrim(iv, useDarkText, 6)
-
-            val tvTemps = TextView(this).apply {
-                text = String.format(Locale.getDefault(), "min %.0f° / max %.0f°", d.tmin, d.tmax)
-                textSize = 14f
-                setTextColor(textColor)
-            }
-
-            row.addView(tvDate); row.addView(iv); row.addView(tvTemps)
-            containerDaily.addView(row)
-        }
-    }
-
-    private fun isBgLight(code: Int): Boolean = when (code) {
-        0, 1, 2, 3, 45, 48, 71, 73, 75, 85, 86 -> true
-        else -> false
-    }
-
     private fun applyContentColorsFor(useDarkText: Boolean) {
         val primary = 0xFF111111.toInt()
         val secondary = 0xFF5E5E5E.toInt()
@@ -549,12 +394,12 @@ class MainActivity : AppCompatActivity() {
         tvTemp.setTextColor(primary)
         tvQuote.setTextColor(primary)
 
-        findViewById<TextView?>(R.id.tvAppTitle)?.setTextColor(primary)
-        findViewById<TextView?>(R.id.tvHourlyTitle)?.setTextColor(secondary)
-        findViewById<TextView?>(R.id.tvDailyTitle)?.setTextColor(secondary)
-        findViewById<TextView?>(R.id.tvQuoteTitle)?.setTextColor(secondary)
+        findViewById<TextView>(R.id.tvAppTitle)?.setTextColor(primary)
+        findViewById<TextView>(R.id.tvHourlyTitle)?.setTextColor(secondary)
+        findViewById<TextView>(R.id.tvDailyTitle)?.setTextColor(secondary)
+        findViewById<TextView>(R.id.tvQuoteTitle)?.setTextColor(secondary)
 
-        findViewById<EditText?>(R.id.etCitySearch)?.apply {
+        findViewById<EditText>(R.id.etCitySearch)?.apply {
             setTextColor(primary)
             setHintTextColor(secondary)
         }
@@ -615,13 +460,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun hasLocationPermission(): Boolean {
         val c = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val f = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        return c || f
+        return c
     }
 
     private fun requestLocationPermission() {
         locationPermsLauncher.launch(arrayOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
         ))
     }
@@ -630,9 +473,8 @@ class MainActivity : AppCompatActivity() {
         if (hasLocationPermission()) {
             onGranted()
         } else {
-            val showRationaleFine = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
             val showRationaleCoarse = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)
-            if (showRationaleFine || showRationaleCoarse) {
+            if (showRationaleCoarse) {
                 AlertDialog.Builder(this)
                     .setTitle("Utiliser ta position")
                     .setMessage("Nous avons besoin de ta localisation pour détecter ta ville actuelle.")
@@ -650,86 +492,36 @@ class MainActivity : AppCompatActivity() {
         startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
     }
 
+    private var locationJob: kotlinx.coroutines.Job? = null
+
     private fun locateAndSelectCity() {
-        findViewById<Button?>(R.id.btnLocate)?.isEnabled = false
-
-        val cts = CancellationTokenSource()
-        try {
-            fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
-                .addOnSuccessListener { loc ->
-                    if (loc != null) {
-                        viewModel.detectLocation(loc.latitude, loc.longitude)
-                        Toast.makeText(this, "Position détectée", Toast.LENGTH_SHORT).show()
-                    } else {
-                        fused.lastLocation
-                            .addOnSuccessListener { last ->
-                                if (last != null) {
-                                    viewModel.detectLocation(last.latitude, last.longitude)
-                                    Toast.makeText(this, "Position détectée", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(this, "Position indisponible.", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            .addOnFailureListener {
-                                Toast.makeText(this, "Erreur position (fallback).", Toast.LENGTH_SHORT).show()
-                            }
-                            .addOnCompleteListener { findViewById<Button?>(R.id.btnLocate)?.isEnabled = true }
-                        return@addOnSuccessListener
-                    }
+        locationJob?.cancel()
+        locationJob = lifecycleScope.launch {
+            findViewById<Button>(R.id.btnLocate).isEnabled = false
+            try {
+                val manager = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+                if (!androidx.core.location.LocationManagerCompat.isLocationEnabled(manager)) {
+                    Toast.makeText(this@MainActivity, "Localisation désactivée. Activez-la dans les paramètres ou recherchez une ville.", Toast.LENGTH_LONG).show()
+                    return@launch
                 }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Erreur position.", Toast.LENGTH_SHORT).show()
-                }
-                .addOnCompleteListener { findViewById<Button?>(R.id.btnLocate)?.isEnabled = true }
-        } catch (_: SecurityException) {
-            Toast.makeText(this, "Permission localisation requise.", Toast.LENGTH_SHORT).show()
-            findViewById<Button?>(R.id.btnLocate)?.isEnabled = true
-        } catch (_: Exception) {
-            Toast.makeText(this, "Localisation indisponible.", Toast.LENGTH_SHORT).show()
-            findViewById<Button?>(R.id.btnLocate)?.isEnabled = true
-        }
-    }
-
-    private fun applyLocation(lat: Double, lon: Double) {
-        ioScope.launch {
-            val detected = try {
-                reverseGeocode(lat, lon)
-            } catch (e: Exception) {
-                Log.e("MeteoQuote", "applyLocation/reverse failed", e)
-                null
-            } ?: City("Ma position", lat, lon)
-
-            withContext(Dispatchers.Main) {
-                selectOrInsertCity(detected)
-                refresh()
-                Toast.makeText(this@MainActivity, "Ville détectée : ${detected.label}", Toast.LENGTH_SHORT).show()
+                val loc = com.valerie.meteoquote.ui.currentLocation(this@MainActivity)
+                if (loc == null) {
+                    Toast.makeText(this@MainActivity, "Position indisponible. Recherchez une ville.", Toast.LENGTH_LONG).show()
+                } else viewModel.detectLocation(loc.latitude, loc.longitude)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                Toast.makeText(this@MainActivity, "Localisation indisponible. La recherche reste accessible.", Toast.LENGTH_LONG).show()
+            } finally {
+                findViewById<Button>(R.id.btnLocate).isEnabled = true
             }
         }
     }
 
-    /** Met à jour le spinner/liste villes : met à jour ou insère la ville détectée, puis persiste. */
-    private fun selectOrInsertCity(city: City) {
-        val count = cityNamesAdapter.count
-        var pos = -1
-        for (i in 0 until count) {
-            val lbl = cityNamesAdapter.getItem(i) ?: continue
-            if (lbl.equals(city.label, ignoreCase = true)) { pos = i; break }
-        }
-
-        if (pos >= 0) {
-            val idx = cities.indexOfFirst { it.label.equals(city.label, ignoreCase = true) }
-            if (idx >= 0) cities[idx] = city.copy(label = cities[idx].label) // garde le même label
-            spinner.setSelection(pos, true)
-        } else {
-            cities.add(0, city)
-            cityNamesAdapter.insert(city.label, 0)
-            spinner.setSelection(0, true)
-        }
-
-        saveCities()
-        addToRecents(city)
+    override fun onStop() {
+        locationJob?.cancel()
+        super.onStop()
     }
-
     /** Ajoute une ville en tête de la LRU (max 10), sans doublon (lat/lon). */
     private fun addToRecents(city: City) {
         // dédup lat/lon (exacts) ; tu peux raffiner si besoin
@@ -776,6 +568,7 @@ class MainActivity : AppCompatActivity() {
         val locChip = layoutInflater.inflate(R.layout.simple_chip_pill, containerRecentChips, false) as TextView?
             ?: TextView(this).apply { text = "Ma position" }
         locChip.id = R.id.chipMyLocation
+        locChip.text = "Ma position"
         // Si tu veux garder le locChip en premier, on le rajoute tout de suite :
         containerRecentChips.addView(locChip)
 
@@ -805,30 +598,12 @@ class MainActivity : AppCompatActivity() {
 
         // Rewire "Ma position" pour éviter de perdre le listener
         locChip.setOnClickListener {
-            findViewById<View?>(R.id.btnLocate)?.performClick()
+            findViewById<View>(R.id.btnLocate)?.performClick()
         }
     }
 
-    /** Sélectionne la ville via le spinner existant (ajoute si absente), puis refresh. */
     private fun selectCityFromChip(city: City) {
-        ensureCityInSpinner(city)
-        val pos = cityNamesAdapter.getPosition(city.label).coerceAtLeast(0)
-        spinner.setSelection(pos)
-        refresh()
-    }
-
-    /** Garantit que la ville est présente dans le spinner/cities. */
-    private fun ensureCityInSpinner(city: City) {
-        val exists = cities.any { it.lat == city.lat && it.lon == city.lon }
-        if (!exists) {
-            cities.add(city)
-            cityNamesAdapter.add(city.label)
-            saveCities()
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        ioScope.cancel()
+        viewModel.addCity(city)
+        addToRecents(city)
     }
 }

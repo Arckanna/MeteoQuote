@@ -13,7 +13,7 @@ class QuoteRepository(private val context: Context) {
         1, 2, 3 -> "clouds"
         45, 48 -> "fog"
         51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> "rain"
-        71, 73, 75, 85, 86 -> "snow"
+        71, 73, 75, 77, 85, 86 -> "snow"
         95, 96, 99 -> "thunder"
         else -> "clouds"
     }
@@ -54,7 +54,7 @@ class QuoteRepository(private val context: Context) {
             1, 2, 3 -> clouds
             45, 48 -> fog
             51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> rain
-            71, 73, 75, 85, 86 -> snow
+            71, 73, 75, 77, 85, 86 -> snow
             95, 96, 99 -> thunder
             else -> clouds
         }
@@ -67,7 +67,7 @@ class QuoteRepository(private val context: Context) {
         val bucket = quotesFor(code)
         val key = "quote_idx_${bucketName(code)}"
         val p = prefs()
-        var idx = p.getInt(key, (date.dayOfYear - 1) % bucket.size)
+        var idx = Math.floorMod(p.getInt(key, (date.dayOfYear - 1) % bucket.size), bucket.size)
         if (advance) idx = (idx + 1) % bucket.size
         p.edit().putInt(key, idx).apply()
         val q = bucket[idx]

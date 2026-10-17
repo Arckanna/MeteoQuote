@@ -27,8 +27,8 @@
 
         <ImageButton
             android:id="@+id/widget_refresh"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:src="@android:drawable/ic_menu_rotate"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Actualiser" />

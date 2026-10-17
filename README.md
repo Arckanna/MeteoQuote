@@ -12,17 +12,17 @@ Recherche de villes (Open-Meteo Geocoding), persistance, **thème dynamique** (c
 - Recherche de villes + **persistance** (SharedPreferences)
 - **Icônes couleur** + **thème** qui s’adapte à la météo (WMO → UI)
 - **Citations** contextualisées + bouton “Nouvelle citation”
-- **Feedback** (mailto) avec infos techniques pré-remplies
+- **Feedback** (Google Forms) avec infos techniques pré-remplies
 
 ## Stack
 - **Kotlin**, Coroutines, Java 17 (desugaring `java.time`)
 - **Android Views/XML**, WindowInsets (edge-to-edge Android 15)
-- Réseau **Open-Meteo** (`URL.openStream()`), `org.json`
+- Réseau **Open-Meteo** (`OkHttp`), `org.json`
 - **Gradle Kotlin DSL**, R8/ProGuard + shrink resources
 
 ## Build
 - Android Studio **Narwhal 3** (JDK 17)
-- `minSdk 24` / `targetSdk 35`
+- `minSdk 24` / `targetSdk 36`
 - Desugaring activée (`coreLibraryDesugaring`)
 - Débogage local : `./gradlew assembleDebug`
 
@@ -30,3 +30,8 @@ Recherche de villes (Open-Meteo Geocoding), persistance, **thème dynamique** (c
 
 ## Licence
 [MIT](LICENSE)
+
+## Modernisation Android 16
+
+Audit : [docs/ANDROID_MODERNIZATION.md](docs/ANDROID_MODERNIZATION.md).
+Procédure de publication et limites : [docs/RELEASE.md](docs/RELEASE.md).

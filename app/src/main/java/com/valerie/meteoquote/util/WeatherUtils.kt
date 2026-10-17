@@ -14,7 +14,7 @@ object WeatherUtils {
         56, 57 -> "Bruine verglaçante"
         61, 63, 65, 80, 81, 82 -> "Pluie"
         66, 67 -> "Pluie verglaçante"
-        71, 73, 75, 85, 86 -> "Neige"
+        71, 73, 75, 77, 85, 86 -> "Neige"
         95, 96, 99 -> "Orage"
         else -> "Conditions variées"
     }
@@ -24,7 +24,7 @@ object WeatherUtils {
         1, 2, 3 -> R.drawable.ic_weather_cloudy_color
         45, 48 -> R.drawable.ic_weather_fog_color
         51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> R.drawable.ic_weather_rain_color
-        71, 73, 75, 85, 86 -> R.drawable.ic_weather_snow_color
+        71, 73, 75, 77, 85, 86 -> R.drawable.ic_weather_snow_color
         95, 96, 99 -> R.drawable.ic_weather_thunder_color
         else -> R.drawable.ic_weather_cloudy_color
     }
@@ -34,7 +34,7 @@ object WeatherUtils {
         1, 2, 3 -> R.drawable.bg_weather_clouds
         45, 48 -> R.drawable.bg_weather_fog
         51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> R.drawable.bg_weather_rain
-        71, 73, 75, 85, 86 -> R.drawable.bg_weather_snow
+        71, 73, 75, 77, 85, 86 -> R.drawable.bg_weather_snow
         95, 96, 99 -> R.drawable.bg_weather_thunder
         else -> R.drawable.bg_weather_clouds
     }
@@ -44,17 +44,18 @@ object WeatherUtils {
         1, 2, 3 -> R.color.status_clouds
         45, 48 -> R.color.status_fog
         51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> R.color.status_rain
-        71, 73, 75, 85, 86 -> R.color.status_snow
+        71, 73, 75, 77, 85, 86 -> R.color.status_snow
         95, 96, 99 -> R.color.status_thunder
         else -> R.color.status_clouds
     }
     
     fun isBgLight(code: Int): Boolean = when (code) {
-        0, 1, 2, 3, 45, 48, 71, 73, 75, 85, 86 -> true
+        0, 1, 2, 3, 45, 48, 71, 73, 75, 77, 85, 86 -> true
         else -> false
     }
     
     fun uvCategory(context: Context, v: Double): Pair<String, Int> {
+        if (!v.isFinite() || v < 0) return "Indisponible" to ContextCompat.getColor(context, R.color.status_clouds)
         val resId = when {
             v < 3 -> R.color.uv_low
             v < 6 -> R.color.uv_mod
@@ -73,6 +74,7 @@ object WeatherUtils {
     }
     
     fun aqiCategoryEU(context: Context, v: Int): Pair<String, Int> {
+        if (v < 0) return "Indisponible" to ContextCompat.getColor(context, R.color.status_clouds)
         val res = when {
             v <= 20 -> R.color.aqi_good
             v <= 40 -> R.color.aqi_fair
