@@ -28,6 +28,8 @@
 
             <EditText
                 android:id="@+id/etCitySearch"
+                android:importantForAutofill="no"
+                android:minHeight="48dp"
                 style="@style/TextBody"
                 android:hint="Rechercher une ville"
                 android:inputType="textCapWords"
@@ -55,6 +57,8 @@
 
             <Spinner
                 android:id="@+id/spinnerCities"
+                android:minHeight="48dp"
+                android:contentDescription="Ville sélectionnée"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1" />
@@ -103,6 +107,16 @@
             </LinearLayout>
         </HorizontalScrollView>
 
+        <Button
+            android:id="@+id/btnRefresh"
+            android:text="@string/refresh"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <TextView
+            android:id="@+id/tvUpdated"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:accessibilityLiveRegion="polite" />
         <!-- Bloc météo principal -->
         <LinearLayout
             android:id="@+id/weatherBlock"
@@ -165,9 +179,9 @@
             android:gravity="center"
             app:layout_constraintHorizontal_bias="0.05"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/tvAqi"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent" />
+             />
 
         <TextView
             android:id="@+id/tvAqi"
@@ -178,9 +192,9 @@
             android:ellipsize="end"
             android:gravity="center"
             app:layout_constraintHorizontal_bias="0.95"
-            app:layout_constraintStart_toEndOf="@+id/tvUv"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvUv"
             app:layout_constraintBottom_toBottomOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
     <!-- Aujourd’hui + 24 h -->
@@ -273,5 +287,11 @@
                 android:layout_marginStart="12dp"/>
         </LinearLayout>
 
+        <Button
+            android:id="@+id/btnPrivacy"
+            android:text="@string/privacy_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
     </LinearLayout>
 </ScrollView>
+

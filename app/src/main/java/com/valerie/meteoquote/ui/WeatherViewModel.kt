@@ -3,7 +3,6 @@ package com.valerie.meteoquote.ui
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import android.app.Application
-import kotlinx.coroutines.Dispatchers
 import com.valerie.meteoquote.data.CityRepository
 import com.valerie.meteoquote.data.QuoteRepository
 import com.valerie.meteoquote.data.WeatherRepository
@@ -13,10 +12,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 data class WeatherUiState(
+    val updatedAt: java.time.Instant? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
     val currentTemp: Double? = null,
@@ -46,6 +45,8 @@ class WeatherViewModel(
     private val cityRepository: CityRepository
 ) : AndroidViewModel(application) {
 
+    private var weatherJob: kotlinx.coroutines.Job? = null
+    private var locationJob: kotlinx.coroutines.Job? = null
     private val _uiState = MutableStateFlow(WeatherUiState())
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
 
@@ -56,9 +57,10 @@ class WeatherViewModel(
     private fun loadCities() {
         val saved = cityRepository.loadCities()
         val cities = if (saved.isNotEmpty()) saved else cityRepository.defaultCities
-        _uiState.value = _uiState.value.copy(cities = cities)
+        val index = cityRepository.selectedIndex(cities.size)
+        _uiState.value = _uiState.value.copy(cities = cities, selectedCityIndex = index)
         if (cities.isNotEmpty()) {
-            refreshWeather(cities[0])
+            refreshWeather(cities[index])
         }
     }
 
@@ -72,13 +74,12 @@ class WeatherViewModel(
             return
         }
 
+        weatherJob?.cancel()
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
-        viewModelScope.launch {
+        weatherJob = viewModelScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    weatherRepository.fetchWeather(targetCity.lat, targetCity.lon)
-                }
+                val result = weatherRepository.fetchWeather(targetCity.lat, targetCity.lon)
                 val (temp, code) = result.current
                 val condition = WeatherUtils.wmoToLabel(code)
                 val quote = quoteRepository.getQuote(LocalDate.now(), code, advance = false)
@@ -91,6 +92,7 @@ class WeatherViewModel(
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
+                    updatedAt = java.time.Instant.now(),
                     currentTemp = temp,
                     weatherCode = code,
                     condition = condition,
@@ -108,6 +110,8 @@ class WeatherViewModel(
                     aqiColor = aqiColor,
                     quote = quote
                 )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -117,8 +121,10 @@ class WeatherViewModel(
         }
     }
 
-    fun selectCity(index: Int) {
+    fun selectCity(index: Int, cancelDetection: Boolean = true) {
         if (index in _uiState.value.cities.indices) {
+            if (cancelDetection) locationJob?.cancel()
+            cityRepository.saveSelectedIndex(index)
             _uiState.value = _uiState.value.copy(selectedCityIndex = index)
             refreshWeather(_uiState.value.cities[index])
         }
@@ -127,7 +133,9 @@ class WeatherViewModel(
     fun addCity(city: City) {
         val currentCities = _uiState.value.cities.toMutableList()
         val alreadyExists = currentCities.any { it.label.equals(city.label, ignoreCase = true) }
-        if (!alreadyExists) {
+        if (alreadyExists) {
+            selectCity(currentCities.indexOfFirst { it.label.equals(city.label, ignoreCase = true) })
+        } else {
             currentCities.add(city)
             cityRepository.saveCities(currentCities)
             _uiState.value = _uiState.value.copy(cities = currentCities)
@@ -136,6 +144,7 @@ class WeatherViewModel(
     }
 
     fun removeCity(index: Int) {
+        locationJob?.cancel()
         val currentCities = _uiState.value.cities.toMutableList()
         if (index in currentCities.indices && currentCities.size > 1) {
             currentCities.removeAt(index)
@@ -145,6 +154,7 @@ class WeatherViewModel(
                 cities = currentCities,
                 selectedCityIndex = newIndex
             )
+            cityRepository.saveSelectedIndex(newIndex)
             if (currentCities.isNotEmpty()) {
                 refreshWeather(currentCities[newIndex])
             }
@@ -160,11 +170,10 @@ class WeatherViewModel(
     }
 
     fun detectLocation(lat: Double, lon: Double) {
-        viewModelScope.launch {
+        locationJob?.cancel()
+        locationJob = viewModelScope.launch {
             try {
-                val detected = withContext(Dispatchers.IO) {
-                    cityRepository.reverseGeocode(lat, lon)
-                }
+                val detected = cityRepository.reverseGeocode(lat, lon)
                     ?: City("Ma position", lat, lon)
                 
                 val currentCities = _uiState.value.cities.toMutableList()
@@ -173,13 +182,18 @@ class WeatherViewModel(
                 }
                 
                 if (existingIndex >= 0) {
-                    selectCity(existingIndex)
+                    currentCities[existingIndex] = detected
+                    cityRepository.saveCities(currentCities)
+                    _uiState.value = _uiState.value.copy(cities = currentCities)
+                    selectCity(existingIndex, cancelDetection = false)
                 } else {
                     currentCities.add(0, detected)
                     cityRepository.saveCities(currentCities)
                     _uiState.value = _uiState.value.copy(cities = currentCities)
-                    selectCity(0)
+                    selectCity(0, cancelDetection = false)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     error = "Erreur lors de la détection de la position: ${e.message}"

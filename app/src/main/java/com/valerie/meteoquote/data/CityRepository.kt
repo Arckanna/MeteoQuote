@@ -2,18 +2,15 @@ package com.valerie.meteoquote.data
 
 import android.content.Context
 import android.location.Geocoder
-import android.util.Log
 import com.valerie.meteoquote.data.model.City
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
-class CityRepository(private val context: Context) {
+class CityRepository(private val context: Context, private val transport: HttpTransport = HttpTransport()) {
     
     private fun prefs() = context.getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE)
     
@@ -23,11 +20,13 @@ class CityRepository(private val context: Context) {
     
     fun loadCities(): List<City> {
         val json = prefs().getString("cities_json", null) ?: return emptyList()
-        val arr = JSONArray(json)
+        val arr = try { JSONArray(json) } catch (_: org.json.JSONException) { return emptyList() }
         val list = mutableListOf<City>()
         for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            list.add(City(o.getString("label"), o.getDouble("lat"), o.getDouble("lon")))
+            runCatching {
+                val o = arr.getJSONObject(i)
+                City(o.getString("label"), o.getDouble("lat"), o.getDouble("lon"))
+            }.getOrNull()?.takeIf { it.label.isNotBlank() && it.lat in -90.0..90.0 && it.lon in -180.0..180.0 }?.let(list::add)
         }
         return list
     }
@@ -49,7 +48,7 @@ class CityRepository(private val context: Context) {
     suspend fun geocodeCity(name: String): City? {
         val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
         val url = "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=1&language=fr&format=json"
-        val body = URL(url).openStream().bufferedReader().use { it.readText() }
+        val body = transport.get(url)
         val results = JSONObject(body).optJSONArray("results") ?: return null
         if (results.length() == 0) return null
         val first = results.getJSONObject(0)
@@ -68,115 +67,39 @@ class CityRepository(private val context: Context) {
         return City(label, lat, lon)
     }
     
-    suspend fun reverseGeocode(lat: Double, lon: Double): City? {
-        runCatching { reverseOpenMeteo(lat, lon) }.getOrNull()?.let { if (it != null) return it }
-        runCatching { reverseNominatim(lat, lon) }.getOrNull()?.let { if (it != null) return it }
-        return runCatching { reverseAndroidGeocoder(lat, lon) }.getOrNull()
-    }
-    
-    private fun reverseOpenMeteo(lat: Double, lon: Double): City? {
-        val url = URL(
-            "https://geocoding-api.open-meteo.com/v1/reverse" +
-                    "?latitude=$lat&longitude=$lon&language=fr&format=json&count=1"
-        )
-        var conn: HttpURLConnection? = null
-        return try {
-            conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10_000
-                readTimeout = 10_000
-                requestMethod = "GET"
-            }
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val body = stream.bufferedReader().use { it.readText() }
-
-            if (code !in 200..299) {
-                Log.w("MeteoQuote", "OpenMeteo reverse HTTP $code: $body")
-                null
+    suspend fun reverseGeocode(lat: Double, lon: Double): City? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (!Geocoder.isPresent()) return@withContext null
+        try {
+            val geo = Geocoder(context, Locale.FRENCH)
+            val list = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                    kotlinx.coroutines.suspendCancellableCoroutine<List<android.location.Address>> { continuation ->
+                        geo.getFromLocation(lat, lon, 1, object : Geocoder.GeocodeListener {
+                            override fun onGeocode(addresses: MutableList<android.location.Address>) {
+                                if (continuation.isActive) continuation.resumeWith(Result.success(addresses))
+                            }
+                            override fun onError(errorMessage: String?) {
+                                if (continuation.isActive) continuation.resumeWith(Result.success(emptyList()))
+                            }
+                        })
+                    }
+                }
             } else {
-                val results = JSONObject(body).optJSONArray("results") ?: return null
-                if (results.length() == 0) return null
-                val first = results.getJSONObject(0)
-
-                val nm = first.optString("name", "")
-                val admin1 = first.optString("admin1", "")
-                val country = first.optString("country_code", "")
-                val label = buildLabel(nm, town = null, village = null, municipality = null, county = null, state = admin1, countryCode = country)
-                val la = first.optDouble("latitude", lat)
-                val lo = first.optDouble("longitude", lon)
-                if (label.isBlank()) null else City(label, la, lo)
+                @Suppress("DEPRECATION")
+                geo.getFromLocation(lat, lon, 1)
             }
-        } catch (e: Exception) {
-            Log.e("MeteoQuote", "reverseOpenMeteo error", e)
-            null
-        } finally {
-            conn?.disconnect()
-        }
-    }
-    
-    private fun reverseNominatim(lat: Double, lon: Double): City? {
-        val url = URL(
-            "https://nominatim.openstreetmap.org/reverse" +
-                    "?lat=$lat&lon=$lon&format=jsonv2&accept-language=fr&zoom=10"
-        )
-        var conn: HttpURLConnection? = null
-        return try {
-            conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10_000
-                readTimeout = 10_000
-                requestMethod = "GET"
-                setRequestProperty("User-Agent", "MeteoQuote/6.2 (ivray3dlabs@gmail.com)")
-            }
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val body = stream.bufferedReader().use { it.readText() }
-
-            if (code !in 200..299) {
-                Log.w("MeteoQuote", "Nominatim reverse HTTP $code: $body")
-                null
-            } else {
-                val jo = JSONObject(body)
-                val addr = jo.optJSONObject("address") ?: return null
-
-                val city = addr.optString("city", "")
-                val town = addr.optString("town", "")
-                val village = addr.optString("village", "")
-                val municipality = addr.optString("municipality", "")
-                val county = addr.optString("county", "")
-                val state = addr.optString("state", "")
-                val cc = addr.optString("country_code", "").uppercase(Locale.ROOT)
-
-                val label = buildLabel(city, town, village, municipality, county, state, cc)
-                if (label.isBlank()) null else City(label, lat, lon)
-            }
-        } catch (e: Exception) {
-            Log.e("MeteoQuote", "reverseNominatim error", e)
-            null
-        } finally {
-            conn?.disconnect()
-        }
-    }
-    
-    private fun reverseAndroidGeocoder(lat: Double, lon: Double): City? {
-        if (!Geocoder.isPresent()) return null
-        return try {
-            val geo = Geocoder(context, Locale.getDefault())
-            val list = geo.getFromLocation(lat, lon, 1)
-            val a = list?.firstOrNull() ?: return null
-            val city = a.locality ?: a.subAdminArea ?: a.subLocality ?: ""
-            val state = a.adminArea ?: ""
-            val cc = a.countryCode ?: ""
-            val label = buildLabel(city, town = null, village = null, municipality = null, county = a.subAdminArea, state = state, countryCode = cc)
+            val a = list?.firstOrNull() ?: return@withContext null
+            val label = buildLabel(a.locality, null, null, null, a.subAdminArea, a.adminArea, a.countryCode)
             if (label.isBlank()) null else City(label, lat, lon)
-        } catch (e: IOException) {
-            Log.e("MeteoQuote", "reverseAndroidGeocoder IO", e)
-            null
-        } catch (e: Exception) {
-            Log.e("MeteoQuote", "reverseAndroidGeocoder error", e)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: IOException) {
             null
         }
     }
-    
+
+    fun selectedIndex(size: Int): Int = prefs().getInt("selected_city", 0).coerceIn(0, (size - 1).coerceAtLeast(0))
+    fun saveSelectedIndex(index: Int) { prefs().edit().putInt("selected_city", index).apply() }
     private fun buildLabel(
         city: String?,
         town: String?,

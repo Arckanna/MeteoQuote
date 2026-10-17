@@ -29,6 +29,7 @@
 
     <!-- Chip pilule -->
     <style name="WidgetChipPill">
+        <item name="android:minHeight">48dp</item>
         <!-- rem : pas de minHeight ici, on laisse la vraie hauteur de 2 lignes -->
         <item name="android:paddingLeft">12dp</item>
         <item name="android:paddingRight">12dp</item>

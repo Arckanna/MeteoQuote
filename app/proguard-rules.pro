@@ -24,4 +24,3 @@
 -keepattributes *Annotation*
 
 # (Optionnel) évite les warnings verbeux sur coroutines
--dontwarn kotlinx.coroutines.**
