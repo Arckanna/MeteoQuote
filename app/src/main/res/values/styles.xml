@@ -1,4 +1,38 @@
 <resources>
+    <style name="MetricValue" parent="TextBody">
+        <item name="android:textSize">24sp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+    </style>
+    <style name="TextSecondary">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">#52646B</item>
+    </style>
+    <style name="SectionHeading" parent="TextSectionTitle">
+        <item name="android:layout_marginTop">@dimen/space_large</item>
+    </style>
+    <style name="ActionSecondary" parent="Widget.Material3.Button.TextButton">
+        <item name="android:minHeight">48dp</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/action_tint</item>
+        <item name="iconTint">@color/action_tint</item>
+    </style>
+    <style name="ActionIcon" parent="ActionSecondary">
+        <item name="android:minWidth">48dp</item>
+        <item name="android:padding">12dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconSize">24dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+    <style name="MetricText" parent="TextBody">
+        <item name="android:padding">@dimen/space_medium</item>
+        <item name="android:background">@drawable/bg_surface</item>
+        <item name="android:lineSpacingExtra">4dp</item>
+        <item name="android:gravity">top</item>
+    </style>
     <!-- Titres & texte -->
     <style name="TextTitleLarge">
         <item name="android:textSize">20sp</item>
@@ -7,7 +41,7 @@
     </style>
 
     <style name="TextSectionTitle">
-        <item name="android:textSize">18sp</item>
+        <item name="android:textSize">16sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:textColor">#5E5E5E</item>
     </style>

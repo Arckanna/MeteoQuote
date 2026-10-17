@@ -5,4 +5,19 @@
     <string name="privacy_notice">Météo &amp; Citation conserve vos villes, leurs coordonnées et vos choix de citations sur cet appareil. Vous pouvez supprimer les villes ou effacer les données dans les paramètres Android. Ces préférences sont exclues de la sauvegarde.\n\nLa localisation approximative est facultative, uniquement avec « Ma position ». Les coordonnées sont envoyées par HTTPS à Open-Meteo pour fournir météo, UV et qualité de l’air. Le service de géocodage Android peut les traiter pour nommer votre ville. La recherche manuelle fonctionne sans permission.\n\nAucun compte, publicité ou outil d’analyse intégré. Le formulaire Google Forms reçoit les informations que vous choisissez d’envoyer et préremplit version, système et modèle de téléphone.\n\nMétéo : Open-Meteo (CC BY 4.0). Géocodage : GeoNames via Open-Meteo. Air : CAMS ENSEMBLE via Open-Meteo. Informations indicatives, sans garantie de disponibilité.\nhttps://open-meteo.com/en/terms\nhttps://open-meteo.com/en/docs\n\nContact : ivray3dlabs@gmail.com</string>
     <string name="refresh">Actualiser</string>
     <string name="privacy_title">Confidentialité et sources</string>
+    <string name="selected_city">Ville sélectionnée</string>
+    <string name="search_city">Rechercher une ville</string>
+    <string name="add_city">Ajouter la ville recherchée</string>
+    <string name="use_location">Utiliser ma position</string>
+    <string name="delete_city">Supprimer la ville sélectionnée</string>
+    <string name="current_weather">Météo actuelle</string>
+    <string name="empty_temperature">— °C</string>
+    <string name="empty_value">—</string>
+    <string name="hourly_title">Les prochaines 24 h</string>
+    <string name="daily_title">Les 7 prochains jours</string>
+    <string name="quote_title">Citation du jour</string>
+    <string name="quote_mood">À l’humeur du ciel</string>
+    <string name="quote_mark">“</string>
+    <string name="new_quote">Nouvelle citation</string>
+    <string name="feedback">Envoyer un retour</string>
 </resources>

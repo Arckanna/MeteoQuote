@@ -1,0 +1,8 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:padding="@dimen/space_medium"
+    android:background="@drawable/bg_surface" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <TextView android:id="@+id/metricTitle" style="@style/TextSecondary" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+    <TextView android:id="@+id/metricValue" style="@style/MetricValue" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+    <TextView android:id="@+id/metricLevel" style="@style/TextSecondary" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+    <TextView android:id="@+id/metricPeak" style="@style/TextSecondary" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+</LinearLayout>
