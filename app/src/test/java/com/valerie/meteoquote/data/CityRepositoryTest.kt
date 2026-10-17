@@ -44,6 +44,16 @@ class CityRepositoryTest {
         assertEquals(1.4442, defaultCities[0].lon, 0.0001)
     }
 
+    @Test fun corruptPreferencesDoNotCrashStartup() {
+        every { mockPrefs.getString(any(), any()) } returns "broken"
+        assertTrue(repository.loadCities().isEmpty())
+    }
+
+    @Test fun invalidCoordinatesAreIgnored() {
+        every { mockPrefs.getString(any(), any()) } returns """[{"label":"Invalid","lat":999,"lon":2}]"""
+        assertTrue(repository.loadCities().isEmpty())
+    }
+
     @Test
     fun `loadCities should return empty list when no saved cities`() {
         every { mockPrefs.getString(any(), any()) } returns null

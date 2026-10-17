@@ -14,9 +14,13 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -26,6 +30,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [28])
 class WeatherViewModelTest {
 
     private lateinit var application: Application
@@ -36,6 +42,7 @@ class WeatherViewModelTest {
 
     @Before
     fun setup() {
+        Dispatchers.setMain(testDispatcher)
         // Utiliser un Application réel pour les tests
         application = ApplicationProvider.getApplicationContext<Application>()
         mockWeatherRepository = mockk(relaxed = true)
@@ -50,6 +57,9 @@ class WeatherViewModelTest {
         every { mockCityRepository.saveCities(any()) } returns Unit
     }
     
+    @org.junit.After
+    fun tearDown() { Dispatchers.resetMain() }
+
     private fun createViewModel(): WeatherViewModel {
         return WeatherViewModel(
             application,
@@ -268,5 +278,56 @@ class WeatherViewModelTest {
             aqiMaxToday = 35,
             aqiPeakTime = now.plusHours(4)
         )
+    }
+
+    @Test fun latestCityWinsWhenEarlierRequestIsSlow() = runTest(testDispatcher) {
+        val cities = listOf(City("Paris", 48.0, 2.0), City("Lyon", 45.0, 4.0))
+        every { mockCityRepository.loadCities() } returns cities
+        coEvery { mockWeatherRepository.fetchWeather(48.0, 2.0) } coAnswers {
+            kotlinx.coroutines.delay(10_000)
+            createMockWeatherResult().copy(current = 1.0 to 0)
+        }
+        coEvery { mockWeatherRepository.fetchWeather(45.0, 4.0) } returns createMockWeatherResult().copy(current = 22.0 to 3)
+        val vm = createViewModel()
+        runCurrent()
+        vm.selectCity(1)
+        advanceUntilIdle()
+        assertEquals(1, vm.uiState.value.selectedCityIndex)
+        assertEquals(22.0, vm.uiState.value.currentTemp!!, 0.001)
+        assertEquals(null, vm.uiState.value.error)
+    }
+
+    @Test fun manualCityNeedsNoLocation() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val vm = createViewModel()
+        vm.addCity(City("Paris", 48.8566, 2.3522))
+        advanceUntilIdle()
+        assertEquals("Paris", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        assertFalse(vm.uiState.value.isLoading)
+        coVerify(exactly = 0) { mockCityRepository.reverseGeocode(any(), any()) }
+    }
+
+    @Test fun missingGeocoderStillUsesCoordinates() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        coEvery { mockCityRepository.reverseGeocode(any(), any()) } returns null
+        val vm = createViewModel()
+        vm.detectLocation(48.0, 2.0)
+        advanceUntilIdle()
+        assertEquals(City("Ma position", 48.0, 2.0), vm.uiState.value.cities.first())
+    }
+
+    @Test fun manualChoiceCancelsSlowReverseGeocoding() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        coEvery { mockCityRepository.reverseGeocode(any(), any()) } coAnswers {
+            kotlinx.coroutines.delay(10_000)
+            City("Position tardive", 48.0, 2.0)
+        }
+        val vm = createViewModel()
+        vm.detectLocation(48.0, 2.0)
+        runCurrent()
+        vm.addCity(City("Choix manuel", 45.0, 4.0))
+        advanceUntilIdle()
+        assertEquals("Choix manuel", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        assertFalse(vm.uiState.value.cities.any { it.label == "Position tardive" })
     }
 }

@@ -5,13 +5,18 @@ import android.content.SharedPreferences
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
 
 class QuoteRepositoryTest {
+
+    @Test fun corruptIndexStillReturnsWeatherQuote() {
+        every { mockPrefs.getInt(any(), any()) } returns -10
+        assertTrue(repository.getQuote(LocalDate.of(2026, 10, 17), 77).isNotBlank())
+        verify { mockPrefs.getInt("quote_idx_snow", any()) }
+    }
 
     private lateinit var mockContext: Context
     private lateinit var mockPrefs: SharedPreferences
