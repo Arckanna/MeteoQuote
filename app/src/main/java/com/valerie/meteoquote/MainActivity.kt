@@ -153,6 +153,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupButtons() {
         findViewById<Button>(R.id.btnRefresh).setOnClickListener { viewModel.refreshWeather() }
+        findViewById<Button>(R.id.btnRetry).setOnClickListener { viewModel.refreshWeather() }
         findViewById<Button>(R.id.btnPrivacy).setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle(R.string.privacy_title)
@@ -247,6 +248,11 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnDeleteCity)?.isEnabled = state.cities.size > 1
 
         findViewById<Button>(R.id.btnRefresh).isEnabled = !state.isLoading
+        findViewById<Button>(R.id.btnRefresh).visibility = if (state.error == null) View.VISIBLE else View.GONE
+        findViewById<Button>(R.id.btnRetry).apply {
+            visibility = if (state.error != null && !state.isLoading) View.VISIBLE else View.GONE
+            isEnabled = !state.isLoading
+        }
         findViewById<TextView>(R.id.tvUpdated).text = if (state.isLoading || state.error != null) "" else state.updatedAt?.let {
             "Actualisé le " + DateTimeFormatter.ofPattern("dd/MM HH:mm", Locale.FRANCE)
                 .withZone(java.time.ZoneId.systemDefault()).format(it)
@@ -267,7 +273,7 @@ class MainActivity : AppCompatActivity() {
         state.error?.let { error ->
             ivIcon.setImageResource(WeatherUtils.wmoToIconRes(3)) // fallback "nuageux"
             // Message d'erreur plus clair
-            val errorMessage = when {
+            val errorMessage = if (state.errorKind != null) error else when {
                 error.contains("Pas de connexion", ignoreCase = true) -> "Pas de connexion internet"
                 error.contains("Délai", ignoreCase = true) -> "Connexion lente ou indisponible"
                 error.contains("réseau", ignoreCase = true) -> "Erreur réseau. Vérifiez votre connexion."

@@ -13,7 +13,11 @@ import kotlin.coroutines.resumeWithException
 
 /** Shared connections, bounded calls, no logging of coordinates or response bodies. */
 class HttpTransport(private val client: OkHttpClient = sharedClient) {
-    suspend fun get(url: String): String = suspendCancellableCoroutine { continuation ->
+    suspend fun get(url: String): String =
+        kotlinx.coroutines.withTimeoutOrNull(REQUEST_BUDGET_MILLIS) { retryNetwork { getOnce(url) } }
+            ?: throw java.net.SocketTimeoutException("Request time budget exceeded")
+
+    private suspend fun getOnce(url: String): String = suspendCancellableCoroutine { continuation ->
         val request = Request.Builder().url(url).header("Accept", "application/json").build()
         require(request.url.isHttps || request.url.host == "localhost")
         val call = client.newCall(request)
@@ -25,13 +29,10 @@ class HttpTransport(private val client: OkHttpClient = sharedClient) {
             override fun onResponse(call: Call, response: Response) {
                 val result = runCatching {
                     response.use {
-                        if (!it.isSuccessful) throw IOException(
-                            if (it.code == 429) "Service temporairement limité. Réessayez plus tard."
-                            else "Service indisponible (HTTP ${it.code})"
-                        )
-                        val body = it.body ?: throw IOException("Réponse vide")
+                        if (!it.isSuccessful) throw HttpStatusException(it.code, retryAfterMillis(it.header("Retry-After")))
+                        val body = it.body ?: throw InvalidResponseException()
                         body.source().request(MAX_BYTES + 1)
-                        if (body.source().buffer.size > MAX_BYTES) throw IOException("Réponse trop volumineuse")
+                        if (body.source().buffer.size > MAX_BYTES) throw InvalidResponseException()
                         body.string()
                     }
                 }
@@ -41,6 +42,16 @@ class HttpTransport(private val client: OkHttpClient = sharedClient) {
     }
 
     companion object {
+        internal fun retryAfterMillis(value: String?, now: java.time.Instant = java.time.Instant.now()): Long? {
+            if (value == null) return null
+            value.trim().toLongOrNull()?.let {
+                return if (it < 0) null else it.coerceAtMost(Long.MAX_VALUE / 1000) * 1000
+            }
+            return runCatching {
+                val target = java.time.ZonedDateTime.parse(value, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()
+                java.time.Duration.between(now, target).toMillis().coerceAtLeast(0)
+            }.getOrNull()
+        }
         private const val MAX_BYTES = 2L * 1024 * 1024
         private val sharedClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)

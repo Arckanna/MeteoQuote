@@ -32,6 +32,24 @@ class WeatherRepositoryTest {
         assertEquals(-1, repository.parseWeather(body, air).aqiNow)
     }
 
+    @Test fun optionalHttpFailureStillReturnsWeather() = kotlinx.coroutines.runBlocking {
+        val transport = io.mockk.mockk<HttpTransport>()
+        io.mockk.coEvery { transport.get(match { it.contains("api.open-meteo.com") }) } returns body
+        io.mockk.coEvery { transport.get(match { it.contains("air-quality-api") }) } throws HttpStatusException(503)
+        val result = WeatherRepository(transport, Clock.fixed(Instant.parse("2026-10-17T10:30:00Z"), ZoneOffset.UTC))
+            .fetchWeather(48.0, 2.0)
+        assertEquals(18.5, result.current.first, 0.001)
+        assertEquals(-1, result.aqiNow)
+    }
+
+    @Test fun optionalAirCancellationIsNotSwallowed() = kotlinx.coroutines.runBlocking {
+        val transport = io.mockk.mockk<HttpTransport>()
+        io.mockk.coEvery { transport.get(any()) } returns body
+        io.mockk.coEvery { transport.get(match { it.contains("air-quality-api") }) } throws kotlinx.coroutines.CancellationException()
+        try { WeatherRepository(transport).fetchWeather(48.0, 2.0); fail("Expected cancellation") }
+        catch (_: kotlinx.coroutines.CancellationException) { }
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsMisalignedArrays() {
         repository.parseWeather(body.replace("[18.0,19.0]", "[18.0]"))

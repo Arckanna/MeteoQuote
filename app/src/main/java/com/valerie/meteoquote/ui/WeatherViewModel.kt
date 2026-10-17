@@ -18,6 +18,7 @@ data class WeatherUiState(
     val updatedAt: java.time.Instant? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
+    val errorKind: WeatherErrorKind? = null,
     val currentTemp: Double? = null,
     val weatherCode: Int? = null,
     val condition: String = "—",
@@ -69,13 +70,14 @@ class WeatherViewModel(
         if (targetCity == null) {
             _uiState.value = _uiState.value.copy(
                 error = "Aucune ville sélectionnée",
+                errorKind = null,
                 isLoading = false
             )
             return
         }
 
         weatherJob?.cancel()
-        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null, errorKind = null)
 
         weatherJob = viewModelScope.launch {
             try {
@@ -92,6 +94,8 @@ class WeatherViewModel(
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
+                    error = null,
+                    errorKind = null,
                     updatedAt = java.time.Instant.now(),
                     currentTemp = temp,
                     weatherCode = code,
@@ -113,9 +117,11 @@ class WeatherViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                val failure = WeatherFailure.from(e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Erreur réseau"
+                    error = failure.message,
+                    errorKind = failure.kind
                 )
             }
         }
@@ -196,7 +202,8 @@ class WeatherViewModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    error = "Erreur lors de la détection de la position: ${e.message}"
+                    error = "Localisation indisponible. Recherchez une ville.",
+                    errorKind = null
                 )
             }
         }

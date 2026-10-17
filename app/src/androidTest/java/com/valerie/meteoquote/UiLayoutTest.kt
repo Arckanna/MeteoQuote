@@ -92,16 +92,27 @@ class UiLayoutTest {
                 assertEquals(0, daily.childCount)
                 assertEquals(View.GONE, activity.findViewById<View>(R.id.tvQuoteAuthor).visibility)
                 assertTrue(activity.findViewById<View>(R.id.btnRefresh).isEnabled)
+                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.btnRetry).visibility)
+                assertTrue(activity.findViewById<View>(R.id.btnRetry).isEnabled)
+                show(state().copy(error = "Service indisponible (HTTP 503).", errorKind = com.valerie.meteoquote.ui.WeatherErrorKind.HTTP))
+                assertEquals("Service indisponible (HTTP 503).", activity.findViewById<TextView>(R.id.tvCondition).text.toString())
                 assertTextFits(root)
                 capture(activity, activity.findViewById(R.id.weatherBlock), "network-error")
+                activity.findViewById<View>(R.id.btnRetry).performClick()
+                val modelField = MainActivity::class.java.getDeclaredField("viewModel").apply { isAccessible = true }
+                val model = modelField.get(activity) as com.valerie.meteoquote.ui.WeatherViewModel
+                assertTrue("Retry must start a new load", model.uiState.value.isLoading)
+                assertNull(model.uiState.value.error)
                 show(state().copy(error = "unexpected end of stream on https://api.example.invalid"))
                 assertEquals("Météo indisponible. Réessayez dans un instant.",
                     activity.findViewById<TextView>(R.id.tvCondition).text.toString())
                 show(state().copy(isLoading = true))
                 assertFalse(activity.findViewById<View>(R.id.btnRefresh).isEnabled)
+                assertEquals(View.GONE, activity.findViewById<View>(R.id.btnRetry).visibility)
                 assertFalse(activity.findViewById<View>(R.id.btnNewQuote).isEnabled)
                 show(state())
                 assertTrue(activity.findViewById<View>(R.id.btnRefresh).isEnabled)
+                assertEquals(View.GONE, activity.findViewById<View>(R.id.btnRetry).visibility)
             }
         }
     }

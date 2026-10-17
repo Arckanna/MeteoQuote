@@ -149,8 +149,28 @@ class WeatherViewModelTest {
         advanceUntilIdle()
 
         val state = testViewModel.uiState.value
-        assertEquals(errorMessage, state.error)
+        assertEquals("Météo indisponible. Réessayez dans un instant.", state.error)
+        assertEquals(WeatherErrorKind.UNKNOWN, state.errorKind)
         assertFalse(state.isLoading)
+    }
+
+    @Test
+    fun `retry clears typed failure and publishes fresh weather`() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } throws com.valerie.meteoquote.data.HttpStatusException(503)
+        val vm = createViewModel()
+        advanceUntilIdle()
+        assertEquals(WeatherErrorKind.HTTP, vm.uiState.value.errorKind)
+        assertTrue(vm.uiState.value.error!!.contains("503"))
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        every { mockQuoteRepository.getQuote(any(), any(), any()) } returns "Recovered quote"
+        vm.refreshWeather()
+        assertTrue(vm.uiState.value.isLoading)
+        assertEquals(null, vm.uiState.value.errorKind)
+        advanceUntilIdle()
+        assertEquals(null, vm.uiState.value.error)
+        assertEquals(null, vm.uiState.value.errorKind)
+        assertFalse(vm.uiState.value.isLoading)
+        assertEquals("Recovered quote", vm.uiState.value.quote)
     }
 
     @Test
