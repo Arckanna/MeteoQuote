@@ -171,6 +171,53 @@
           android:id="@+id/aqiCard"
           layout="@layout/item_metric" />
       </com.valerie.meteoquote.ui.MetricLayout>
+      <LinearLayout
+        android:id="@+id/quoteBlock"
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_medium"
+        android:padding="@dimen/space_medium">
+        <TextView
+          android:id="@+id/tvQuoteTitle"
+          style="@style/TextSectionTitle"
+          android:accessibilityHeading="true"
+          android:text="@string/quote_title"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content" />
+        <TextView
+          android:id="@+id/tvQuoteMood"
+          style="@style/TextSecondary"
+          android:text="@string/quote_mood"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="@dimen/space_small" />
+        <TextView
+          android:id="@+id/tvQuote"
+          android:text="@string/empty_value"
+          android:textSize="24sp"
+          android:layout_marginTop="@dimen/space_medium"
+          android:fontFamily="serif"
+          android:textColor="#203A43"
+          android:lineSpacingMultiplier="1.2"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content" />
+        <TextView
+          android:id="@+id/tvQuoteAuthor"
+          style="@style/TextBody"
+          android:layout_marginTop="@dimen/space_medium"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content" />
+        <Button
+          android:id="@+id/btnNewQuote"
+          style="@style/ActionSecondary"
+          android:text="@string/new_quote"
+          app:icon="@drawable/ic_refresh"
+          app:iconSize="18dp"
+          android:layout_marginTop="@dimen/space_medium"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content" />
+      </LinearLayout>
       <TextView
         android:id="@+id/tvHourlyTitle"
         style="@style/SectionHeading"
@@ -205,58 +252,13 @@
         android:layout_height="wrap_content"
         android:paddingTop="@dimen/space_small"
         android:paddingBottom="@dimen/space_small" />
-      <LinearLayout
-        android:id="@+id/quoteBlock"
-        android:orientation="vertical"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_section"
-        android:padding="@dimen/space_large">
-        <TextView
-          android:id="@+id/tvQuoteTitle"
-          style="@style/TextSectionTitle"
-          android:accessibilityHeading="true"
-          android:text="@string/quote_title"
-          android:layout_width="match_parent"
-          android:layout_height="wrap_content" />
-        <TextView
-          android:id="@+id/tvQuoteMood"
-          style="@style/TextSecondary"
-          android:text="@string/quote_mood"
-          android:layout_width="match_parent"
-          android:layout_height="wrap_content"
-          android:layout_marginTop="@dimen/space_small" />
-        <TextView
-          android:text="@string/quote_mark"
-          android:textSize="56sp"
-          android:fontFamily="serif"
-          android:textColor="#476570"
-          android:importantForAccessibility="no"
-          android:layout_width="match_parent"
-          android:layout_height="wrap_content" />
-        <TextView
-          android:id="@+id/tvQuote"
-          android:text="@string/empty_value"
-          android:textSize="24sp"
-          android:fontFamily="serif"
-          android:textColor="#203A43"
-          android:lineSpacingMultiplier="1.2"
-          android:layout_width="match_parent"
-          android:layout_height="wrap_content" />
-        <TextView
-          android:id="@+id/tvQuoteAuthor"
-          style="@style/TextBody"
-          android:layout_marginTop="@dimen/space_medium"
-          android:layout_width="match_parent"
-          android:layout_height="wrap_content" />
-        <Button
-          android:id="@+id/btnNewQuote"
-          style="@style/ActionSecondary"
-          android:text="@string/new_quote"
-          android:layout_marginTop="@dimen/space_medium"
-          android:layout_width="wrap_content"
-          android:layout_height="wrap_content" />
-      </LinearLayout>
+      <Button
+        android:id="@+id/btnToggleDaily"
+        style="@style/ActionSecondary"
+        android:text="@string/show_week"
+        android:visibility="gone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
       <Button
         android:id="@+id/btnFeedback"
         style="@style/ActionSecondary"

@@ -1,0 +1,3 @@
+<resources>
+    <dimen name="metric_padding">16dp</dimen>
+</resources>

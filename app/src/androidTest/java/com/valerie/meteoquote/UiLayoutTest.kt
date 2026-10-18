@@ -48,6 +48,16 @@ class UiLayoutTest {
                         View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
                     root.layout(0, 0, root.measuredWidth, root.measuredHeight)
                 }
+                show(state().copy(cities = listOf(City("Toulouse", 43.6, 1.4))))
+                val quoteTitle = activity.findViewById<View>(R.id.tvQuoteTitle)
+                val quotePanel = activity.findViewById<View>(R.id.quoteBlock)
+                if (activity.resources.configuration.fontScale <= 1f) {
+                    val screenHeight = activity.resources.displayMetrics.heightPixels
+                    val slightScroll = 96 * activity.resources.displayMetrics.density
+                    assertTrue("Quote must be identifiable within a short scroll",
+                        quotePanel.top + quoteTitle.bottom < screenHeight + slightScroll)
+                }
+                capture(activity, root, "first-glance")
                 show(state())
                 for (background in listOf(0xFFFFF0D7, 0xFFE7EFF2, 0xFFEBEEEB, 0xFFE7F2F4, 0xFFEEEBF4, 0xFFE6EEF7, 0xFFF6F8F7)) {
                     assertTrue(androidx.core.graphics.ColorUtils.calculateContrast(0xFF52646B.toInt(), background.toInt()) >= 4.5)
@@ -63,6 +73,29 @@ class UiLayoutTest {
                     }
                 } else assertTrue(aqi.top >= uv.bottom)
                 val daily = activity.findViewById<LinearLayout>(R.id.containerDaily)
+                val toggle = activity.findViewById<TextView>(R.id.btnToggleDaily)
+                val quoteBlock = activity.findViewById<View>(R.id.quoteBlock)
+                assertTrue(quoteBlock.top >= activity.findViewById<View>(R.id.containerChips).bottom)
+                assertTrue(quoteBlock.bottom <= activity.findViewById<View>(R.id.tvHourlyTitle).top)
+                assertEquals(3, daily.childCount)
+                assertEquals("Voir les 7 jours", toggle.text.toString())
+                toggle.performClick()
+                show(state()) // A quote/weather update must preserve the expanded presentation.
+                assertEquals(7, daily.childCount)
+                assertEquals("Réduire", toggle.text.toString())
+                assertTextFits(root)
+                capture(activity, daily, "daily-expanded")
+                toggle.performClick()
+                show(state())
+                assertEquals(3, daily.childCount)
+                assertEquals("Voir les 7 jours", toggle.text.toString())
+                show(state().copy(dailyForecasts = state().dailyForecasts.take(2)))
+                assertEquals(2, daily.childCount)
+                assertEquals(View.GONE, toggle.visibility)
+                show(state().copy(quote = "\"Le ciel s’éclaircit.\" — Auteur"))
+                assertTextFits(quoteBlock)
+                capture(activity, quoteBlock, "quote-short")
+                show(state())
                 val iconLeft = daily.getChildAt(0).findViewById<View>(R.id.dayIcon).left
                 for (index in 0 until daily.childCount) assertEquals(iconLeft, daily.getChildAt(index).findViewById<View>(R.id.dayIcon).left)
                 assertEquals(24, activity.findViewById<LinearLayout>(R.id.containerHourly).childCount)
@@ -90,6 +123,7 @@ class UiLayoutTest {
                 assertTrue(activity.findViewById<TextView>(R.id.tvCondition).text.contains("connexion"))
                 assertEquals(View.GONE, uv.visibility)
                 assertEquals(0, daily.childCount)
+                assertEquals(View.GONE, toggle.visibility)
                 assertEquals(View.GONE, activity.findViewById<View>(R.id.tvQuoteAuthor).visibility)
                 assertTrue(activity.findViewById<View>(R.id.btnRefresh).isEnabled)
                 assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.btnRetry).visibility)

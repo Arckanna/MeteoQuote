@@ -12,7 +12,7 @@ class MetricLayout @JvmOverloads constructor(context: Context, attrs: AttributeS
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val visible = (0 until childCount).map { getChildAt(it) }.filter { it.visibility != GONE }
-        stacked = width / resources.displayMetrics.density < 320 * resources.configuration.fontScale
+        stacked = width / resources.displayMetrics.density < 280 * resources.configuration.fontScale
         val childWidth = if (stacked || visible.size < 2) width else (width - gap) / 2
         val panels = visible.filterIsInstance<android.widget.LinearLayout>()
         panels.forEach { panel -> (0 until panel.childCount).forEach { panel.getChildAt(it).minimumHeight = 0 } }

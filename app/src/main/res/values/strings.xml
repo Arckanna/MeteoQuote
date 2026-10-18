@@ -1,4 +1,9 @@
 <resources>
+    <string name="show_week">Voir les 7 jours</string>
+    <string name="show_all_forecasts">Voir toutes les prévisions</string>
+    <string name="collapse_week">Réduire</string>
+    <string name="forecast_collapsed">Aperçu de trois jours</string>
+    <string name="forecast_expanded">Toutes les prévisions affichées</string>
     <string name="retry">Réessayer</string>
     <string name="app_name">Météo &amp; Citation</string>
     <string name="title_meteo_citation">Météo &amp; Citation</string>
