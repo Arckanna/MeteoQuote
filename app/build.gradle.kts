@@ -1,4 +1,5 @@
 plugins {
+    alias(libs.plugins.compose)
     id("com.android.application")
     kotlin("android")
     alias(libs.plugins.kotlin.kapt)
@@ -46,12 +47,19 @@ android {
         jvmTarget = "17"
     }
     buildFeatures {
+        compose = true
         buildConfig = true
     }
     testOptions.unitTests.isIncludeAndroidResources = true
 }
 
 dependencies {
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.material3)
+    implementation(libs.lifecycle.compose)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.test)
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
     implementation(libs.hilt.work)

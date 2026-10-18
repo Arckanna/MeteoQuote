@@ -57,7 +57,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var containerHourly: LinearLayout
     private lateinit var containerDaily: LinearLayout
     private lateinit var tvTemp: TextView
-    private lateinit var tvQuote: TextView
     private lateinit var cityNamesAdapter: ArrayAdapter<String>
     private lateinit var rootContainer: ViewGroup
     private lateinit var tvAqi: TextView
@@ -104,6 +103,13 @@ class MainActivity : AppCompatActivity() {
 
         // Initialisation du ViewModel
         viewModel = ViewModelProvider(this)[WeatherViewModel::class.java]
+        findViewById<androidx.compose.ui.platform.ComposeView>(R.id.quoteBlock).apply {
+            setViewCompositionStrategy(
+                androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                com.valerie.meteoquote.ui.compose.QuoteRoute(viewModel.uiState, viewModel::nextQuote)
+            }
+        }
 
         tvUv = findViewById<ViewGroup>(R.id.uvCard).findViewById(R.id.metricValue)
         rootContainer = findViewById(R.id.rootContainer)
@@ -111,7 +117,6 @@ class MainActivity : AppCompatActivity() {
         ivIcon = findViewById(R.id.ivIcon)
         tvCondition = findViewById(R.id.tvCondition)
         tvTemp = findViewById(R.id.tvTemp)
-        tvQuote = findViewById(R.id.tvQuote)
         tvAqi = findViewById<ViewGroup>(R.id.aqiCard).findViewById(R.id.metricValue)
         containerHourly = findViewById(R.id.containerHourly)
         containerDaily = findViewById(R.id.containerDaily)
@@ -126,7 +131,7 @@ class MainActivity : AppCompatActivity() {
             insets
         }
         ViewCompat.requestApplyInsets(content)
-        listOf(R.id.tvHourlyTitle, R.id.tvDailyTitle, R.id.tvQuoteTitle).forEach { ViewCompat.setAccessibilityHeading(findViewById(it), true) }
+        listOf(R.id.tvHourlyTitle, R.id.tvDailyTitle).forEach { ViewCompat.setAccessibilityHeading(findViewById(it), true) }
         setupSpinner()
         setupButtons()
         observeViewModel()
@@ -163,9 +168,6 @@ class MainActivity : AppCompatActivity() {
                 .setTitle(R.string.privacy_title)
                 .setMessage(getString(R.string.privacy_notice))
                 .setPositiveButton("Fermer", null).show()
-        }
-        findViewById<Button>(R.id.btnNewQuote).setOnClickListener {
-            viewModel.nextQuote()
         }
 
         findViewById<Button>(R.id.btnFeedback)?.setOnClickListener { openFeedbackForm() }
@@ -251,7 +253,6 @@ class MainActivity : AppCompatActivity() {
         }
         spinner.contentDescription = "Ville sélectionnée : " + labels.getOrNull(state.selectedCityIndex).orEmpty()
         if (spinner.selectedItemPosition != state.selectedCityIndex) spinner.setSelection(state.selectedCityIndex)
-        findViewById<Button>(R.id.btnNewQuote).isEnabled = !state.isLoading && state.error == null
         // Activer/désactiver le bouton de suppression selon le nombre de villes
         findViewById<Button>(R.id.btnDeleteCity)?.isEnabled = state.cities.size > 1
 
@@ -267,7 +268,6 @@ class MainActivity : AppCompatActivity() {
         } ?: ""
         // Gestion du chargement
         if (state.isLoading) {
-            renderQuote("—")
             containerHourly.removeAllViews()
             forecastRenderer.renderDaily(emptyList(), true)
             findViewById<View>(R.id.uvCard).visibility = View.GONE
@@ -287,7 +287,6 @@ class MainActivity : AppCompatActivity() {
                 error.contains("réseau", ignoreCase = true) -> "Erreur réseau. Vérifiez votre connexion."
                 else -> "Météo indisponible. Réessayez dans un instant."
             }
-            renderQuote("—")
             applyWeatherTheme(-1)
             tvCondition.text = errorMessage
             tvTemp.text = "— °C"
@@ -328,8 +327,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Citation
-        renderQuote(state.quote)
     }
 
     private fun renderMetric(view: TextView, title: String, value: String, level: String, peak: String, color: Int) {
@@ -349,19 +346,7 @@ class MainActivity : AppCompatActivity() {
     }
     @Suppress("DEPRECATION")
     private fun applyWeatherTheme(code: Int) {
-        val (tint, mood) = when (code) {
-            0 -> 0xFFFFF0D7.toInt() to "Quelques mots sous un ciel clair"
-            1, 2, 3 -> 0xFFE7EFF2.toInt() to "Quelques mots au fil des nuages"
-            45, 48 -> 0xFFEBEEEB.toInt() to "Quelques mots dans la brume"
-            71, 73, 75, 77, 85, 86 -> 0xFFE7F2F4.toInt() to "Quelques mots dans le calme de la neige"
-            95, 96, 99 -> 0xFFEEEBF4.toInt() to "Quelques mots à travers l’orage"
-            51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> 0xFFE6EEF7.toInt() to "Quelques mots au rythme de la pluie"
-            else -> 0xFFEBEEEB.toInt() to "À l’humeur du ciel"
-        }
-        findViewById<View>(R.id.quoteBlock).background = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(tint, 0xFFF6F8F7.toInt())
-        )
-        findViewById<TextView>(R.id.tvQuoteMood).text = mood
+        val tint = com.valerie.meteoquote.ui.WeatherMood.forCode(code).first
         findViewById<View>(R.id.weatherBlock).background = GradientDrawable().apply {
             cornerRadius = resources.getDimension(R.dimen.card_radius)
             setColor(androidx.core.graphics.ColorUtils.blendARGB(Color.WHITE, tint, 0.5f))
@@ -371,14 +356,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun renderQuote(formatted: String) {
-        val quote = com.valerie.meteoquote.ui.QuotePresentation.from(formatted)
-        tvQuote.text = quote.text
-        findViewById<TextView>(R.id.tvQuoteAuthor).apply {
-            text = quote.author?.let { "— $it" }.orEmpty()
-            visibility = if (quote.author == null) View.GONE else View.VISIBLE
-        }
-    }
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private fun applyContentColors() {
@@ -387,12 +364,10 @@ class MainActivity : AppCompatActivity() {
 
         tvCondition.setTextColor(primary)
         tvTemp.setTextColor(primary)
-        tvQuote.setTextColor(primary)
 
         findViewById<TextView>(R.id.tvAppTitle)?.setTextColor(primary)
         findViewById<TextView>(R.id.tvHourlyTitle)?.setTextColor(secondary)
         findViewById<TextView>(R.id.tvDailyTitle)?.setTextColor(secondary)
-        findViewById<TextView>(R.id.tvQuoteTitle)?.setTextColor(secondary)
 
         findViewById<EditText>(R.id.etCitySearch)?.apply {
             setTextColor(primary)

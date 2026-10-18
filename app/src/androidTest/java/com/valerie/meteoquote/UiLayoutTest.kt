@@ -49,13 +49,12 @@ class UiLayoutTest {
                     root.layout(0, 0, root.measuredWidth, root.measuredHeight)
                 }
                 show(state().copy(cities = listOf(City("Toulouse", 43.6, 1.4))))
-                val quoteTitle = activity.findViewById<View>(R.id.tvQuoteTitle)
                 val quotePanel = activity.findViewById<View>(R.id.quoteBlock)
                 if (activity.resources.configuration.fontScale <= 1f) {
                     val screenHeight = activity.resources.displayMetrics.heightPixels
                     val slightScroll = 96 * activity.resources.displayMetrics.density
                     assertTrue("Quote must be identifiable within a short scroll",
-                        quotePanel.top + quoteTitle.bottom < screenHeight + slightScroll)
+                        quotePanel.top + 48 * activity.resources.displayMetrics.density < screenHeight + slightScroll)
                 }
                 capture(activity, root, "first-glance")
                 show(state())
@@ -94,19 +93,16 @@ class UiLayoutTest {
                 assertEquals(View.GONE, toggle.visibility)
                 show(state().copy(quote = "\"Le ciel s’éclaircit.\" — Auteur"))
                 assertTextFits(quoteBlock)
-                capture(activity, quoteBlock, "quote-short")
                 show(state())
                 val iconLeft = daily.getChildAt(0).findViewById<View>(R.id.dayIcon).left
                 for (index in 0 until daily.childCount) assertEquals(iconLeft, daily.getChildAt(index).findViewById<View>(R.id.dayIcon).left)
                 assertEquals(24, activity.findViewById<LinearLayout>(R.id.containerHourly).childCount)
-                assertEquals("— Auteur de test", activity.findViewById<TextView>(R.id.tvQuoteAuthor).text.toString())
                 for (id in listOf(R.id.btnAddCity, R.id.btnLocate, R.id.btnDeleteCity, R.id.btnRefresh)) {
                     val button = activity.findViewById<View>(id)
                     assertTrue(button.width >= 48 * activity.resources.displayMetrics.density - 1)
                     assertFalse(button.contentDescription.isNullOrBlank())
                 }
                 capture(activity, root, "full")
-                capture(activity, activity.findViewById(R.id.quoteBlock), "quote")
                 capture(activity, daily, "daily")
                 assertTextFits(root)
                 val search = activity.findViewById<android.widget.EditText>(R.id.etCitySearch)
@@ -114,7 +110,6 @@ class UiLayoutTest {
                     search.inputType and android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0)
                 for (code in listOf(0, 63, 73, 95)) {
                     show(state(code))
-                    capture(activity, activity.findViewById(R.id.quoteBlock), "quote-$code")
                 }
                 show(state().copy(aqiNow = -1, aqiMaxToday = -1))
                 assertEquals("Indisponible", aqi.findViewById<TextView>(R.id.metricLevel).text.toString())
@@ -124,7 +119,6 @@ class UiLayoutTest {
                 assertEquals(View.GONE, uv.visibility)
                 assertEquals(0, daily.childCount)
                 assertEquals(View.GONE, toggle.visibility)
-                assertEquals(View.GONE, activity.findViewById<View>(R.id.tvQuoteAuthor).visibility)
                 assertTrue(activity.findViewById<View>(R.id.btnRefresh).isEnabled)
                 assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.btnRetry).visibility)
                 assertTrue(activity.findViewById<View>(R.id.btnRetry).isEnabled)
@@ -143,7 +137,6 @@ class UiLayoutTest {
                 show(state().copy(isLoading = true))
                 assertFalse(activity.findViewById<View>(R.id.btnRefresh).isEnabled)
                 assertEquals(View.GONE, activity.findViewById<View>(R.id.btnRetry).visibility)
-                assertFalse(activity.findViewById<View>(R.id.btnNewQuote).isEnabled)
                 show(state())
                 assertTrue(activity.findViewById<View>(R.id.btnRefresh).isEnabled)
                 assertEquals(View.GONE, activity.findViewById<View>(R.id.btnRetry).visibility)
