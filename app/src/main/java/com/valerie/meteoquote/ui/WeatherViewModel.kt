@@ -39,7 +39,8 @@ data class WeatherUiState(
     val selectedCityIndex: Int = 0
 )
 
-class WeatherViewModel(
+@dagger.hilt.android.lifecycle.HiltViewModel
+class WeatherViewModel @javax.inject.Inject constructor(
     application: Application,
     private val weatherRepository: WeatherRepository,
     private val quoteRepository: QuoteRepository,

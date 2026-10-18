@@ -10,6 +10,7 @@
 
 
     <application
+        android:name=".MeteoQuoteApplication"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -20,6 +21,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MeteoQuote">
         <service android:name="androidx.work.impl.foreground.SystemForegroundService" tools:node="remove" />
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            tools:node="merge">
+            <meta-data android:name="androidx.work.WorkManagerInitializer" tools:node="remove" />
+        </provider>
 
         <activity
             android:name=".MainActivity"
