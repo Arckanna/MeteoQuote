@@ -1,7 +1,11 @@
 plugins {
     id("com.android.application")
     kotlin("android")
+    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.hilt)
 }
+
+kapt { correctErrorTypes = true }
 
 android {
     namespace = "com.valerie.meteoquote"
@@ -48,6 +52,11 @@ android {
 }
 
 dependencies {
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)
+    implementation(libs.hilt.work)
+    kapt(libs.hilt.work.compiler)
+    androidTestImplementation(libs.work.testing)
     coreLibraryDesugaring(libs.desugar)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

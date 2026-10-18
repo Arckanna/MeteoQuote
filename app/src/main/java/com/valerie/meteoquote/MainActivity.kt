@@ -30,7 +30,8 @@ import androidx.lifecycle.lifecycleScope
 import com.valerie.meteoquote.data.CityRepository
 import com.valerie.meteoquote.data.model.City
 import com.valerie.meteoquote.ui.WeatherViewModel
-import com.valerie.meteoquote.ui.WeatherViewModelFactory
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import com.valerie.meteoquote.util.WeatherUtils
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -44,7 +45,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.CancellationException
 
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
+    @Inject lateinit var cityRepository: CityRepository
     
     private lateinit var forecastRenderer: com.valerie.meteoquote.ui.ForecastRenderer
     private lateinit var viewModel: WeatherViewModel
@@ -100,8 +103,7 @@ class MainActivity : AppCompatActivity() {
         updateRecentChips()
 
         // Initialisation du ViewModel
-        val factory = WeatherViewModelFactory(application)
-        viewModel = ViewModelProvider(this, factory)[WeatherViewModel::class.java]
+        viewModel = ViewModelProvider(this)[WeatherViewModel::class.java]
 
         tvUv = findViewById<ViewGroup>(R.id.uvCard).findViewById(R.id.metricValue)
         rootContainer = findViewById(R.id.rootContainer)
@@ -199,7 +201,6 @@ class MainActivity : AppCompatActivity() {
             findViewById<Button>(R.id.btnAddCity).isEnabled = false
             lifecycleScope.launch {
                 try {
-                    val cityRepository = CityRepository(this@MainActivity)
                     val found = withContext(Dispatchers.IO) {
                         cityRepository.geocodeCity(q)
                     }

@@ -7,7 +7,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 
 class WeatherRepositoryTest {
-    private val repository = WeatherRepository(clock = Clock.fixed(Instant.parse("2026-10-17T10:30:00Z"), ZoneOffset.UTC))
+    private val repository = OpenMeteoWeatherRepository(clock = Clock.fixed(Instant.parse("2026-10-17T10:30:00Z"), ZoneOffset.UTC))
     private val body = """{
         "timezone":"Europe/Paris",
         "current":{"temperature_2m":18.5,"weather_code":77},
@@ -36,7 +36,7 @@ class WeatherRepositoryTest {
         val transport = io.mockk.mockk<HttpTransport>()
         io.mockk.coEvery { transport.get(match { it.contains("api.open-meteo.com") }) } returns body
         io.mockk.coEvery { transport.get(match { it.contains("air-quality-api") }) } throws HttpStatusException(503)
-        val result = WeatherRepository(transport, Clock.fixed(Instant.parse("2026-10-17T10:30:00Z"), ZoneOffset.UTC))
+        val result = OpenMeteoWeatherRepository(transport, Clock.fixed(Instant.parse("2026-10-17T10:30:00Z"), ZoneOffset.UTC))
             .fetchWeather(48.0, 2.0)
         assertEquals(18.5, result.current.first, 0.001)
         assertEquals(-1, result.aqiNow)
@@ -46,7 +46,7 @@ class WeatherRepositoryTest {
         val transport = io.mockk.mockk<HttpTransport>()
         io.mockk.coEvery { transport.get(any()) } returns body
         io.mockk.coEvery { transport.get(match { it.contains("air-quality-api") }) } throws kotlinx.coroutines.CancellationException()
-        try { WeatherRepository(transport).fetchWeather(48.0, 2.0); fail("Expected cancellation") }
+        try { OpenMeteoWeatherRepository(transport).fetchWeather(48.0, 2.0); fail("Expected cancellation") }
         catch (_: kotlinx.coroutines.CancellationException) { }
     }
 

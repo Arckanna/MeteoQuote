@@ -17,7 +17,14 @@ import java.time.LocalDate
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 
-class WeatherWidgetWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+@androidx.hilt.work.HiltWorker
+class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
+    @dagger.assisted.Assisted context: Context,
+    @dagger.assisted.Assisted params: WorkerParameters,
+    private val cityRepository: CityRepository,
+    private val weatherRepository: WeatherRepository,
+    private val quoteRepository: QuoteRepository
+) : CoroutineWorker(context, params) {
     private val ACTION_REFRESH = "com.valerie.meteoquote.ACTION_REFRESH"
 
     override suspend fun doWork(): Result {
@@ -61,9 +68,6 @@ class WeatherWidgetWorker(context: Context, params: WorkerParameters) : Coroutin
         // Charger les données en arrière-plan
         run {
             try {
-                val cityRepository = CityRepository(context)
-                val weatherRepository = WeatherRepository()
-                val quoteRepository = QuoteRepository(context)
 
                 val cities = cityRepository.loadCities()
                 val city = if (cities.isNotEmpty()) cities[cityRepository.selectedIndex(cities.size)] else cityRepository.defaultCities[0]

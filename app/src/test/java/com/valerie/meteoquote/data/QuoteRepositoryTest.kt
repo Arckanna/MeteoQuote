@@ -34,7 +34,7 @@ class QuoteRepositoryTest {
         every { mockEditor.putInt(any(), any()) } returns mockEditor
         every { mockEditor.apply() } returns Unit
 
-        repository = QuoteRepository(mockContext)
+        repository = LocalQuoteRepository(mockContext)
     }
 
     @Test

@@ -31,7 +31,7 @@ class CityRepositoryTest {
         every { mockEditor.putString(any(), any()) } returns mockEditor
         every { mockEditor.apply() } returns Unit
 
-        repository = CityRepository(mockContext)
+        repository = AndroidCityRepository(mockContext)
     }
 
     @Test
