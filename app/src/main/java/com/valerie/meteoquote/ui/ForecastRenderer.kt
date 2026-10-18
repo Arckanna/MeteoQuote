@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Button
 import androidx.core.view.ViewCompat
 import com.valerie.meteoquote.R
 import com.valerie.meteoquote.data.model.DailyForecast
@@ -18,8 +19,20 @@ import java.util.Locale
 class ForecastRenderer(
     private val context: Context,
     private val containerHourly: LinearLayout,
-    private val containerDaily: LinearLayout
+    private val containerDaily: LinearLayout,
+    private val toggleDaily: Button,
+    initiallyExpanded: Boolean = false
 ) {
+    var isDailyExpanded = initiallyExpanded
+        private set
+    private var dailyItems: List<DailyForecast> = emptyList()
+
+    init {
+        toggleDaily.setOnClickListener {
+            isDailyExpanded = !isDailyExpanded
+            drawDaily()
+        }
+    }
     private fun dp(value: Float) = (value * context.resources.displayMetrics.density).toInt()
     private fun degrees(value: Double) = String.format(Locale.FRANCE, "%.0f°", value)
 
@@ -42,10 +55,20 @@ class ForecastRenderer(
     }
 
     fun renderDaily(items: List<DailyForecast>, useDarkText: Boolean) {
+        dailyItems = items
+        drawDaily()
+    }
+
+    private fun drawDaily() {
         containerDaily.removeAllViews()
+        toggleDaily.visibility = if (dailyItems.size > 3) View.VISIBLE else View.GONE
+        toggleDaily.setText(if (isDailyExpanded) R.string.collapse_week
+            else if (dailyItems.size == 7) R.string.show_week else R.string.show_all_forecasts)
+        ViewCompat.setStateDescription(toggleDaily, context.getString(
+            if (isDailyExpanded) R.string.forecast_expanded else R.string.forecast_collapsed))
         val date = DateTimeFormatter.ofPattern("EEE\nd MMM", Locale.FRANCE)
         val spoken = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRANCE)
-        items.forEach { d ->
+        (if (isDailyExpanded) dailyItems else dailyItems.take(3)).forEach { d ->
             val row = LayoutInflater.from(context).inflate(R.layout.item_daily, containerDaily, false)
             row.findViewById<TextView>(R.id.dayDate).text = d.date.format(date)
             row.findViewById<ImageView>(R.id.dayIcon).setImageResource(WeatherUtils.wmoToIconRes(d.code))

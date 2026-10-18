@@ -113,7 +113,9 @@ class MainActivity : AppCompatActivity() {
         tvAqi = findViewById<ViewGroup>(R.id.aqiCard).findViewById(R.id.metricValue)
         containerHourly = findViewById(R.id.containerHourly)
         containerDaily = findViewById(R.id.containerDaily)
-        forecastRenderer = com.valerie.meteoquote.ui.ForecastRenderer(this, containerHourly, containerDaily)
+        forecastRenderer = com.valerie.meteoquote.ui.ForecastRenderer(
+            this, containerHourly, containerDaily, findViewById(R.id.btnToggleDaily),
+            savedInstanceState?.getBoolean("dailyExpanded") ?: false)
 
         val content = rootContainer.parent.parent as View
         ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
@@ -235,6 +237,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("dailyExpanded", forecastRenderer.isDailyExpanded)
+        super.onSaveInstanceState(outState)
+    }
+
     private fun updateUI(state: com.valerie.meteoquote.ui.WeatherUiState) {
         val labels = state.cities.map { it.label }
         if ((0 until cityNamesAdapter.count).map { cityNamesAdapter.getItem(it) } != labels) {
@@ -261,7 +268,7 @@ class MainActivity : AppCompatActivity() {
         if (state.isLoading) {
             renderQuote("—")
             containerHourly.removeAllViews()
-            containerDaily.removeAllViews()
+            forecastRenderer.renderDaily(emptyList(), true)
             findViewById<View>(R.id.uvCard).visibility = View.GONE
             findViewById<View>(R.id.aqiCard).visibility = View.GONE
             tvCondition.text = "Chargement…"
@@ -284,7 +291,7 @@ class MainActivity : AppCompatActivity() {
             tvCondition.text = errorMessage
             tvTemp.text = "— °C"
             containerHourly.removeAllViews()
-            containerDaily.removeAllViews()
+            forecastRenderer.renderDaily(emptyList(), true)
             // Masquer les badges UV et AQI en cas d'erreur
             findViewById<View>(R.id.uvCard).visibility = View.GONE
             findViewById<View>(R.id.aqiCard).visibility = View.GONE
