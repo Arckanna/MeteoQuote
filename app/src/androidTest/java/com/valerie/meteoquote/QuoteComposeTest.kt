@@ -19,24 +19,18 @@ import java.io.File
 class QuoteComposeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
-    @Test fun quoteReactsToFlowAndKeepsTextAndActionsAccessible() {
+    @Test fun quoteReactsToFlowWithoutChangeAction() {
         val states = MutableStateFlow(WeatherUiState(weatherCode = 0,
             quote = "\"Le ciel s’éclaircit.\" — Auteur"))
-        var clicks = 0
         compose.runOnUiThread {
             compose.activity.findViewById<ComposeView>(R.id.quoteBlock).setContent {
-                QuoteRoute(states) { clicks++ }
+                QuoteRoute(states)
             }
         }
         compose.onNodeWithText("Quelques mots sous un ciel clair").assertExists()
         compose.onNodeWithTag("quote-author").assertTextEquals("— Auteur")
-        compose.runOnUiThread {
-            val host = compose.activity.findViewById<ComposeView>(R.id.quoteBlock)
-            val scroll = host.parent.parent.parent as android.widget.ScrollView
-            scroll.scrollTo(0, host.top)
-        }
-        compose.onNodeWithTag("new-quote").assertIsEnabled().performClick()
-        compose.runOnIdle { assertEquals(1, clicks) }
+        compose.onNodeWithTag("new-quote").assertDoesNotExist()
+        compose.onNodeWithText("Nouvelle citation").assertDoesNotExist()
         capture("compose-short")
 
         val longQuote = "La lumière revient toujours entre les nuages. " +
@@ -53,12 +47,12 @@ class QuoteComposeTest {
         capture("compose-long-rain")
 
         compose.runOnIdle { states.value = states.value.copy(isLoading = true) }
-        compose.onNodeWithTag("new-quote").assertIsNotEnabled()
+        compose.onNodeWithTag("new-quote").assertDoesNotExist()
         compose.onNodeWithTag("quote-text").assertTextEquals("—")
         compose.runOnIdle { states.value = states.value.copy(isLoading = false, error = "Réseau indisponible") }
-        compose.onNodeWithTag("new-quote").assertIsNotEnabled()
+        compose.onNodeWithTag("new-quote").assertDoesNotExist()
         compose.runOnIdle { states.value = states.value.copy(error = null, weatherCode = 73) }
-        compose.onNodeWithTag("new-quote").assertIsEnabled()
+        compose.onNodeWithTag("new-quote").assertDoesNotExist()
         compose.onNodeWithText("Quelques mots dans le calme de la neige").assertExists()
     }
 
