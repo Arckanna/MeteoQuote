@@ -1,5 +1,7 @@
 # Migration progressive vers Compose
 
+Évolution du 19 octobre 2026 : l’action « Nouvelle citation » et son espace réservé ont été retirés du bloc Compose. `QuoteRoute` et `QuoteSection` ne reçoivent plus de callback de changement. La sélection contextualisée existante reste inchangée. Le test Compose vérifie désormais l’absence de cette action ; les descriptions et résultats ci-dessous retracent l’étape initiale de migration.
+
 ## Première étape : citation
 
 Le bloc citation est migré vers Compose Material 3, au même emplacement après UV/AQI. Les autres sections restent en Views/XML, dont les prévisions horaires et les sept jours repliables. Hilt, le ViewModel, les repositories, les API et le widget ne changent pas.

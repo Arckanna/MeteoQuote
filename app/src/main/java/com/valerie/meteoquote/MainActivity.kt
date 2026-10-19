@@ -107,7 +107,7 @@ class MainActivity : AppCompatActivity() {
             setViewCompositionStrategy(
                 androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                com.valerie.meteoquote.ui.compose.QuoteRoute(viewModel.uiState, viewModel::nextQuote)
+                com.valerie.meteoquote.ui.compose.QuoteRoute(viewModel.uiState)
             }
         }
 

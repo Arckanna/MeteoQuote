@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -39,14 +38,14 @@ fun MeteoQuoteTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun QuoteRoute(states: StateFlow<WeatherUiState>, onNewQuote: () -> Unit) {
+fun QuoteRoute(states: StateFlow<WeatherUiState>) {
     val state by states.collectAsStateWithLifecycle()
-    MeteoQuoteTheme { QuoteSection(state, onNewQuote) }
+    MeteoQuoteTheme { QuoteSection(state) }
 }
 
 /** Stateless presentation: quote selection and loading remain owned by the ViewModel. */
 @Composable
-fun QuoteSection(state: WeatherUiState, onNewQuote: () -> Unit) {
+fun QuoteSection(state: WeatherUiState) {
     val available = !state.isLoading && state.error == null
     val quote = QuotePresentation.from(if (available) state.quote else "—")
     val (tint, mood) = WeatherMood.forCode(if (available) state.weatherCode ?: -1 else -1)
@@ -67,14 +66,6 @@ fun QuoteSection(state: WeatherUiState, onNewQuote: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             Text("— $it", modifier = Modifier.testTag("quote-author"),
                 color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
-        }
-        Spacer(Modifier.height(16.dp))
-        TextButton(onClick = onNewQuote, enabled = available,
-            modifier = Modifier.testTag("new-quote").heightIn(min = 48.dp)) {
-            Icon(painterResource(R.drawable.ic_refresh), contentDescription = null,
-                modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.new_quote), fontSize = 14.sp)
         }
     }
 }
