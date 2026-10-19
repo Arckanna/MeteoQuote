@@ -24,6 +24,5 @@
     <string name="quote_title">Citation du jour</string>
     <string name="quote_mood">À l’humeur du ciel</string>
     <string name="quote_mark">“</string>
-    <string name="new_quote">Nouvelle citation</string>
     <string name="feedback">Envoyer un retour</string>
 </resources>
