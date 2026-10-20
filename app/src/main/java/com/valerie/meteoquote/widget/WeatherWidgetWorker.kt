@@ -39,6 +39,15 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
         appWidgetId: Int
     ) {
         val views = RemoteViews(context.packageName, R.layout.widget_weather)
+        fun publish(hasQuote: Boolean) {
+            val component = ComponentName(context, WeatherWidgetProvider::class.java)
+            appWidgetManager.getAppWidgetIds(component).forEach { id ->
+                views.setViewVisibility(R.id.widget_quote,
+                    if (hasQuote && WidgetLayout.quoteFits(context, appWidgetManager.getAppWidgetOptions(id)))
+                        android.view.View.VISIBLE else android.view.View.GONE)
+                appWidgetManager.updateAppWidget(id, views)
+            }
+        }
 
         // Intent pour ouvrir l'app
         val intent = Intent(context, MainActivity::class.java)
@@ -48,7 +57,7 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
         )
         views.setOnClickPendingIntent(R.id.widget_icon, pendingIntent)
         views.setOnClickPendingIntent(R.id.widget_temp, pendingIntent)
-        views.setOnClickPendingIntent(R.id.widget_quote, pendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_content, pendingIntent)
 
         // Intent pour refresh
         val refreshIntent = Intent(context, WeatherWidgetProvider::class.java).apply {
@@ -63,11 +72,7 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
         // Afficher un état de chargement initial
         views.setTextViewText(R.id.widget_temp, "…")
         views.setTextViewText(R.id.widget_condition, "Chargement…")
-        quoteRepository.assignedQuote()?.let {
-            views.setTextViewText(R.id.widget_quote, it)
-            views.setViewVisibility(R.id.widget_quote, android.view.View.VISIBLE)
-        }
-        appWidgetManager.updateAppWidget(ComponentName(context, WeatherWidgetProvider::class.java), views)
+        publish(false)
 
         // Charger les données en arrière-plan
         run {
@@ -85,24 +90,25 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
 
                 // Mettre à jour les vues (peut être fait depuis n'importe quel thread)
                 views.setTextViewText(R.id.widget_city, city.label)
-                views.setTextViewText(R.id.widget_temp, "${temp.toInt()}°C")
+                views.setTextViewText(R.id.widget_temp, "${temp.toInt()}°")
+                views.setContentDescription(R.id.widget_temp, "${temp.toInt()} degrés Celsius")
                 views.setTextViewText(R.id.widget_condition, condition)
+                views.setContentDescription(R.id.widget_content, "${city.label}, ${temp.toInt()} degrés Celsius, $condition")
                 views.setImageViewResource(R.id.widget_icon, WeatherUtils.wmoToIconRes(code))
                 
                 views.setTextViewText(R.id.widget_quote, quote)
-                views.setViewVisibility(R.id.widget_quote, android.view.View.VISIBLE)
 
                 // Mettre à jour le widget
-                appWidgetManager.updateAppWidget(ComponentName(context, WeatherWidgetProvider::class.java), views)
+                publish(true)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // En cas d'erreur, afficher un message
-                views.setTextViewText(R.id.widget_temp, "—°C")
+                views.setTextViewText(R.id.widget_temp, "—°")
                 views.setTextViewText(R.id.widget_condition, "Erreur")
-                views.setTextViewText(R.id.widget_quote, quoteRepository.getQuote(null))
-                views.setViewVisibility(R.id.widget_quote, android.view.View.VISIBLE)
-                appWidgetManager.updateAppWidget(ComponentName(context, WeatherWidgetProvider::class.java), views)
+                views.setViewVisibility(R.id.widget_quote, android.view.View.GONE)
+                views.setContentDescription(R.id.widget_content, "Météo indisponible")
+                publish(false)
             }
         }
     }
