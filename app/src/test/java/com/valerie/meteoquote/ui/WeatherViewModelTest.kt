@@ -47,6 +47,7 @@ class WeatherViewModelTest {
         application = ApplicationProvider.getApplicationContext<Application>()
         mockWeatherRepository = mockk(relaxed = true)
         mockQuoteRepository = mockk(relaxed = true)
+        every { mockQuoteRepository.assignedQuote() } returns null
         mockCityRepository = mockk(relaxed = true)
 
         // Setup default cities - retourner une liste vide pour éviter le chargement automatique
@@ -77,7 +78,7 @@ class WeatherViewModelTest {
         )
         every { mockCityRepository.loadCities() } returns cities
         coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
-        every { mockQuoteRepository.getQuote(any(), any(), any()) } returns "\"Test\" — Author"
+        every { mockQuoteRepository.getQuote(any()) } returns "\"Test\" — Author"
 
         val newViewModel = createViewModel()
 
@@ -93,7 +94,7 @@ class WeatherViewModelTest {
         val quote = "\"Test quote\" — Author"
 
         coEvery { mockWeatherRepository.fetchWeather(city.lat, city.lon) } returns weatherResult
-        every { mockQuoteRepository.getQuote(any(), any(), any()) } returns quote
+        every { mockQuoteRepository.getQuote(any()) } returns quote
 
         val testViewModel = createViewModel()
         advanceUntilIdle() // Attendre que l'init se termine
@@ -119,7 +120,7 @@ class WeatherViewModelTest {
             kotlinx.coroutines.delay(100)
             createMockWeatherResult()
         }
-        every { mockQuoteRepository.getQuote(any(), any(), any()) } returns "\"Test\" — Author"
+        every { mockQuoteRepository.getQuote(any()) } returns "\"Test\" — Author"
 
         val testViewModel = createViewModel()
         advanceUntilIdle()
@@ -162,7 +163,7 @@ class WeatherViewModelTest {
         assertEquals(WeatherErrorKind.HTTP, vm.uiState.value.errorKind)
         assertTrue(vm.uiState.value.error!!.contains("503"))
         coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
-        every { mockQuoteRepository.getQuote(any(), any(), any()) } returns "Recovered quote"
+        every { mockQuoteRepository.getQuote(any()) } returns "Recovered quote"
         vm.refreshWeather()
         assertTrue(vm.uiState.value.isLoading)
         assertEquals(null, vm.uiState.value.errorKind)
@@ -181,7 +182,7 @@ class WeatherViewModelTest {
         )
         every { mockCityRepository.loadCities() } returns cities
         coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
-        every { mockQuoteRepository.getQuote(any(), any(), any()) } returns "\"Test\" — Author"
+        every { mockQuoteRepository.getQuote(any()) } returns "\"Test\" — Author"
 
         val newViewModel = createViewModel()
         advanceUntilIdle()
@@ -199,7 +200,7 @@ class WeatherViewModelTest {
         
         every { mockCityRepository.loadCities() } returns initialCities
         coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
-        every { mockQuoteRepository.getQuote(any(), any(), any()) } returns "\"Test\" — Author"
+        every { mockQuoteRepository.getQuote(any()) } returns "\"Test\" — Author"
 
         val newViewModel = createViewModel()
         advanceUntilIdle()
@@ -219,7 +220,7 @@ class WeatherViewModelTest {
         
         every { mockCityRepository.loadCities() } returns cities
         coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
-        every { mockQuoteRepository.getQuote(any(), any(), any()) } returns "\"Test\" — Author"
+        every { mockQuoteRepository.getQuote(any()) } returns "\"Test\" — Author"
 
         val newViewModel = createViewModel()
         advanceUntilIdle()
@@ -232,28 +233,38 @@ class WeatherViewModelTest {
     }
 
     @Test
-    fun `nextQuote should advance to next quote`() = runTest(testDispatcher) {
-        val city = City("Paris", 48.8566, 2.3522)
-        val weatherResult = createMockWeatherResult()
-        val quote1 = "\"Quote 1\" — Author"
-        val quote2 = "\"Quote 2\" — Author"
-
-        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns weatherResult
-        every { mockQuoteRepository.getQuote(any(), any(), false) } returns quote1
-        every { mockQuoteRepository.getQuote(any(), any(), true) } returns quote2
-
-        val testViewModel = createViewModel()
+    fun `visible screen updates daily quote without a weather request`() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        every { mockQuoteRepository.getQuote(any()) } returns "Yesterday"
+        val model = createViewModel()
         advanceUntilIdle()
-        
-        testViewModel.refreshWeather(city)
-        advanceUntilIdle()
+        every { mockQuoteRepository.getQuote(any()) } returns "Today"
+        model.refreshDailyQuote()
+        assertEquals("Today", model.uiState.value.quote)
+        coVerify(exactly = 1) { mockWeatherRepository.fetchWeather(any(), any()) }
+    }
 
-        testViewModel.nextQuote()
+    @Test
+    fun `previously assigned quote is available before the weather load finishes`() = runTest(testDispatcher) {
+        every { mockQuoteRepository.assignedQuote() } returns "Today's persisted quote"
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } throws java.io.IOException()
+        every { mockQuoteRepository.getQuote(null) } returns "Today's persisted quote"
+        val model = createViewModel()
+        assertTrue(model.uiState.value.isLoading)
+        assertEquals("Today's persisted quote", model.uiState.value.quote)
         advanceUntilIdle()
+        assertEquals("Today's persisted quote", model.uiState.value.quote)
+    }
 
-        val state = testViewModel.uiState.value
-        assertEquals(quote2, state.quote)
-        coVerify { mockQuoteRepository.getQuote(any(), any(), true) }
+    @Test
+    fun `offline first load still assigns a daily quote`() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } throws java.io.IOException()
+        every { mockQuoteRepository.getQuote(null) } returns "Neutral daily thought"
+        val model = createViewModel()
+        advanceUntilIdle()
+        assertEquals("Neutral daily thought", model.uiState.value.quote)
+        assertFalse(model.uiState.value.isLoading)
+        assertTrue(model.uiState.value.error != null)
     }
 
     @Test
@@ -265,7 +276,7 @@ class WeatherViewModelTest {
         every { mockCityRepository.loadCities() } returns emptyList()
         coEvery { mockCityRepository.reverseGeocode(lat, lon) } returns detectedCity
         coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
-        every { mockQuoteRepository.getQuote(any(), any(), any()) } returns "\"Test\" — Author"
+        every { mockQuoteRepository.getQuote(any()) } returns "\"Test\" — Author"
 
         val newViewModel = createViewModel()
         advanceUntilIdle()

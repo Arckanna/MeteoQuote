@@ -1,7 +1,8 @@
 package com.valerie.meteoquote.data
 
-import java.time.LocalDate
-
 interface QuoteRepository {
-    fun getQuote(date: LocalDate, code: Int, advance: Boolean = false): String
+    /** Reads today's existing assignment without choosing an atmosphere prematurely. */
+    fun assignedQuote(): String?
+    /** Returns the phone-local day's assignment; null means no usable weather is available. */
+    fun getQuote(code: Int?): String
 }

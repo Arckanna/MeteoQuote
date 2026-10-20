@@ -1,7 +1,8 @@
 # Météo & Citation — Cahier des charges et roadmap
 
 Version de cadrage : 1.0 — 19 octobre 2026.
-Statut : proposition de périmètre et de critères de recette ; les évolutions décrites ne sont pas encore implémentées.
+Statut : cahier de cadrage ; Lot 0 implémenté, autres lots encore proposés.
+Suivi du 20 octobre 2026 : le Lot 0 « Citation quotidienne fiable et règles de date » est implémenté sur une branche dédiée ; voir [règles et validation du Lot 0](lot-0-citation-quotidienne.md). Les autres lots restent proposés. À la demande de l’utilisateur, les prévisions quotidiennes commencent désormais à J+1.
 Référence du projet consulté : application 7.1, versionCode 19.
 
 ## 1. Vision produit
@@ -134,7 +135,7 @@ Exigences :
 - Composants recevant des états et des callbacks ; aucun accès réseau dans les composables.
 - Collecte des flux liée au cycle de vie.
 - Conservation de la sélection de ville, de l’état trois/sept jours et du défilement lors d’une recréation lorsque pertinent.
-- Trois journées issues de l’API visibles initialement, aujourd’hui compris si c’est la première entrée ; sept au dépliage.
+- Trois journées futures visibles initialement, de J+1 à J+3 ; sept au dépliage, jusqu’à J+7. La date de référence est celle de la ville sélectionnée.
 - Prévisions horaires compactes, régulières et défilant horizontalement.
 - Sur tablette, largeur de lecture maîtrisée ; une disposition à plusieurs colonnes n’est retenue qu’après validation visuelle.
 - Suppression des anciens layouts et renderers seulement après parité fonctionnelle vérifiée.

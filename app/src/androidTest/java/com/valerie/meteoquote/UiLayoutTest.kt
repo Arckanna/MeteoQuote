@@ -30,7 +30,7 @@ class UiLayoutTest {
         aqiNow = 18, aqiMaxToday = 22, aqiLabel = "Bon", aqiPeakTime = "06:00", aqiColor = 0xFF24B877.toInt(),
         updatedAt = java.time.Instant.parse("2026-10-17T12:00:00Z"),
         hourlyForecasts = (0..23).map { HourlyForecast(LocalDateTime.of(2026, 10, 17, 12, 0).plusHours(it.toLong()), 18.0 - it, code) },
-        dailyForecasts = (0..6).map { DailyForecast(date.plusDays(it.toLong()), -12.0 + it, 8.0 + it, code) },
+        dailyForecasts = (1..7).map { DailyForecast(date.plusDays(it.toLong()), -12.0 + it, 8.0 + it, code) },
         quote = "\"La lumière revient toujours entre les nuages. Prenons le temps de regarder le ciel, de respirer et de trouver, dans les petites choses du quotidien, une raison de sourire.\" — Auteur de test"
     )
 

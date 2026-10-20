@@ -48,7 +48,7 @@ class QuoteComposeTest {
 
         compose.runOnIdle { states.value = states.value.copy(isLoading = true) }
         compose.onNodeWithTag("new-quote").assertDoesNotExist()
-        compose.onNodeWithTag("quote-text").assertTextEquals("—")
+        compose.onNodeWithTag("quote-text").assertTextEquals(longQuote)
         compose.runOnIdle { states.value = states.value.copy(isLoading = false, error = "Réseau indisponible") }
         compose.onNodeWithTag("new-quote").assertDoesNotExist()
         compose.runOnIdle { states.value = states.value.copy(error = null, weatherCode = 73) }

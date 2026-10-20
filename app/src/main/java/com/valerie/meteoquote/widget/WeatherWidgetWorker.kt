@@ -13,7 +13,6 @@ import com.valerie.meteoquote.data.WeatherRepository
 import com.valerie.meteoquote.util.WeatherUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.time.LocalDate
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 
@@ -49,6 +48,7 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
         )
         views.setOnClickPendingIntent(R.id.widget_icon, pendingIntent)
         views.setOnClickPendingIntent(R.id.widget_temp, pendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_quote, pendingIntent)
 
         // Intent pour refresh
         val refreshIntent = Intent(context, WeatherWidgetProvider::class.java).apply {
@@ -63,6 +63,10 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
         // Afficher un état de chargement initial
         views.setTextViewText(R.id.widget_temp, "…")
         views.setTextViewText(R.id.widget_condition, "Chargement…")
+        quoteRepository.assignedQuote()?.let {
+            views.setTextViewText(R.id.widget_quote, it)
+            views.setViewVisibility(R.id.widget_quote, android.view.View.VISIBLE)
+        }
         appWidgetManager.updateAppWidget(ComponentName(context, WeatherWidgetProvider::class.java), views)
 
         // Charger les données en arrière-plan
@@ -77,7 +81,7 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
                 }
                 val (temp, code) = result.current
                 val condition = WeatherUtils.wmoToLabel(code)
-                val quote = quoteRepository.getQuote(LocalDate.now(), code, advance = false)
+                val quote = quoteRepository.getQuote(code)
 
                 // Mettre à jour les vues (peut être fait depuis n'importe quel thread)
                 views.setTextViewText(R.id.widget_city, city.label)
@@ -85,13 +89,8 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
                 views.setTextViewText(R.id.widget_condition, condition)
                 views.setImageViewResource(R.id.widget_icon, WeatherUtils.wmoToIconRes(code))
                 
-                // Afficher la citation si elle tient (masquer si trop longue)
-                if (quote.length <= 80) {
-                    views.setTextViewText(R.id.widget_quote, quote)
-                    views.setViewVisibility(R.id.widget_quote, android.view.View.VISIBLE)
-                } else {
-                    views.setViewVisibility(R.id.widget_quote, android.view.View.GONE)
-                }
+                views.setTextViewText(R.id.widget_quote, quote)
+                views.setViewVisibility(R.id.widget_quote, android.view.View.VISIBLE)
 
                 // Mettre à jour le widget
                 appWidgetManager.updateAppWidget(ComponentName(context, WeatherWidgetProvider::class.java), views)
@@ -101,7 +100,8 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
                 // En cas d'erreur, afficher un message
                 views.setTextViewText(R.id.widget_temp, "—°C")
                 views.setTextViewText(R.id.widget_condition, "Erreur")
-                views.setViewVisibility(R.id.widget_quote, android.view.View.GONE)
+                views.setTextViewText(R.id.widget_quote, quoteRepository.getQuote(null))
+                views.setViewVisibility(R.id.widget_quote, android.view.View.VISIBLE)
                 appWidgetManager.updateAppWidget(ComponentName(context, WeatherWidgetProvider::class.java), views)
             }
         }
