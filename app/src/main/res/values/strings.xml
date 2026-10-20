@@ -20,7 +20,7 @@
     <string name="empty_temperature">— °C</string>
     <string name="empty_value">—</string>
     <string name="hourly_title">Les prochaines 24 h</string>
-    <string name="daily_title">Les 7 prochains jours</string>
+    <string name="daily_title">Les 7 prochains jours, dès demain</string>
     <string name="quote_title">Citation du jour</string>
     <string name="quote_mood">À l’humeur du ciel</string>
     <string name="quote_mark">“</string>

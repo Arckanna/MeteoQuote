@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 data class WeatherUiState(
     val updatedAt: java.time.Instant? = null,
@@ -49,7 +48,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
 
     private var weatherJob: kotlinx.coroutines.Job? = null
     private var locationJob: kotlinx.coroutines.Job? = null
-    private val _uiState = MutableStateFlow(WeatherUiState())
+    private val _uiState = MutableStateFlow(WeatherUiState(quote = quoteRepository.assignedQuote() ?: "—"))
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
 
     init {
@@ -72,7 +71,8 @@ class WeatherViewModel @javax.inject.Inject constructor(
             _uiState.value = _uiState.value.copy(
                 error = "Aucune ville sélectionnée",
                 errorKind = null,
-                isLoading = false
+                isLoading = false,
+                quote = quoteRepository.getQuote(null)
             )
             return
         }
@@ -85,7 +85,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
                 val result = weatherRepository.fetchWeather(targetCity.lat, targetCity.lon)
                 val (temp, code) = result.current
                 val condition = WeatherUtils.wmoToLabel(code)
-                val quote = quoteRepository.getQuote(LocalDate.now(), code, advance = false)
+                val quote = quoteRepository.getQuote(code)
 
                 val (uvLabel, uvColor) = WeatherUtils.uvCategory(getApplication(), result.uvMaxToday)
                 val uvPeakTime = result.uvPeakTime?.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
@@ -122,7 +122,8 @@ class WeatherViewModel @javax.inject.Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = failure.message,
-                    errorKind = failure.kind
+                    errorKind = failure.kind,
+                    quote = quoteRepository.getQuote(null)
                 )
             }
         }
@@ -168,12 +169,13 @@ class WeatherViewModel @javax.inject.Inject constructor(
         }
     }
 
-    fun nextQuote() {
-        val code = _uiState.value.weatherCode
-        if (code != null) {
-            val quote = quoteRepository.getQuote(LocalDate.now(), code, advance = true)
-            _uiState.value = _uiState.value.copy(quote = quote)
-        }
+    /** Called only while the screen is visible, also after returning from the background. */
+    fun refreshDailyQuote() {
+        val state = _uiState.value
+        // Let the first weather response choose the atmosphere before assigning today's quote.
+        if (state.isLoading) return
+        val code = state.weatherCode.takeIf { state.error == null && state.currentTemp != null }
+        _uiState.value = state.copy(quote = quoteRepository.getQuote(code))
     }
 
     fun detectLocation(lat: Double, lon: Double) {

@@ -47,7 +47,7 @@ fun QuoteRoute(states: StateFlow<WeatherUiState>) {
 @Composable
 fun QuoteSection(state: WeatherUiState) {
     val available = !state.isLoading && state.error == null
-    val quote = QuotePresentation.from(if (available) state.quote else "—")
+    val quote = QuotePresentation.from(state.quote)
     val (tint, mood) = WeatherMood.forCode(if (available) state.weatherCode ?: -1 else -1)
     Column(Modifier.fillMaxWidth().testTag("quote-section")
         .background(Brush.verticalGradient(listOf(Color(tint), MaterialTheme.colorScheme.background)))

@@ -235,6 +235,12 @@ class MainActivity : AppCompatActivity() {
     private fun observeViewModel() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    while (true) {
+                        viewModel.refreshDailyQuote()
+                        kotlinx.coroutines.delay(60_000)
+                    }
+                }
                 viewModel.uiState.collect { updateUI(it) }
             }
         }

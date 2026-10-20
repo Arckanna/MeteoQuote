@@ -15,6 +15,24 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class DependencyInjectionTest {
     @Test
+    fun appAndWorkerShareTheDailyQuoteRepository() {
+        val application = ApplicationProvider.getApplicationContext<MeteoQuoteApplication>()
+        val worker = TestListenableWorkerBuilder<WeatherWidgetWorker>(application)
+            .setWorkerFactory(application.workManagerConfiguration.workerFactory).build()
+        val workerRepository = WeatherWidgetWorker::class.java.getDeclaredField("quoteRepository")
+            .apply { isAccessible = true }.get(worker)
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val model = MainActivity::class.java.getDeclaredField("viewModel")
+                    .apply { isAccessible = true }.get(activity)
+                val appRepository = model.javaClass.getDeclaredField("quoteRepository")
+                    .apply { isAccessible = true }.get(model)
+                assertSame(appRepository, workerRepository)
+            }
+        }
+    }
+
+    @Test
     fun workerCanBeCreatedWithoutAnActivity() {
         val application = ApplicationProvider.getApplicationContext<MeteoQuoteApplication>()
         // Exercise the production Application configuration, including lazy WorkManager startup.
