@@ -13,7 +13,6 @@ import com.valerie.meteoquote.data.WeatherRepository
 import com.valerie.meteoquote.util.WeatherUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.time.LocalDate
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 
@@ -87,7 +86,7 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
                 }
                 val (temp, code) = result.current
                 val condition = WeatherUtils.wmoToLabel(code)
-                val quote = quoteRepository.getQuote(LocalDate.now(), code, advance = false)
+                val quote = quoteRepository.getQuote(code)
 
                 // Mettre à jour les vues (peut être fait depuis n'importe quel thread)
                 views.setTextViewText(R.id.widget_city, city.label)

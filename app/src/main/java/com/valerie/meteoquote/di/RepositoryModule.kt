@@ -28,6 +28,6 @@ object RepositoryModule {
         AndroidCityRepository(context, transport)
 
     @Provides @Singleton
-    fun quoteRepository(@ApplicationContext context: Context): QuoteRepository =
-        LocalQuoteRepository(context)
+    fun quoteRepository(@ApplicationContext context: Context, clock: Clock): QuoteRepository =
+        LocalQuoteRepository(context, clock)
 }
