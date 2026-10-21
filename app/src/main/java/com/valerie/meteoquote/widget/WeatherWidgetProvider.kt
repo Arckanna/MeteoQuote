@@ -4,34 +4,105 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
-import android.view.View
-import android.widget.RemoteViews
-import com.valerie.meteoquote.R
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
+import androidx.work.*
+import com.valerie.meteoquote.data.CityRepository
+import dagger.hilt.android.AndroidEntryPoint
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class WeatherWidgetProvider : AppWidgetProvider() {
+    @Inject lateinit var cities: CityRepository
+
     override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, options: Bundle) {
-        // Resize locally: no additional weather request is needed.
-        val views = RemoteViews(context.packageName, R.layout.widget_weather)
-        views.setViewVisibility(R.id.widget_quote,
-            if (WidgetLayout.quoteFits(context, options)) View.VISIBLE else View.GONE)
-        manager.partiallyUpdateAppWidget(id, views)
+        if (!restore(context, manager, intArrayOf(id))) showLoading(context, manager, intArrayOf(id))
     }
 
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = enqueue(context)
+    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+        // Package/component changes invalidate the launcher's RemoteViews, including its data.
+        // Restore a complete view without starting another worker for this system callback.
+        restore(context, manager, ids)
+        val prefs = context.getSharedPreferences("widget_schedule", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val due = ids.filter {
+            val age = now - prefs.getLong("attempt_$it", 0)
+            age < 0 || age >= 60_000 || !prefs.contains("attempt_$it")
+        }.toIntArray()
+        // WorkManager component changes can cause another APPWIDGET_UPDATE broadcast.
+        // Do not turn those broadcasts into an unbounded chain of network requests.
+        if (due.isEmpty()) return
+        prefs.edit().apply { due.forEach { putLong("attempt_$it", now) } }.apply()
+        showLoading(context, manager, due)
+        enqueue(context, due)
+    }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == "com.valerie.meteoquote.ACTION_REFRESH") enqueue(context)
+        if (intent.action == WidgetViews.ACTION_REFRESH) {
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(android.content.ComponentName(context, javaClass))
+            context.getSharedPreferences("widget_schedule", Context.MODE_PRIVATE).edit()
+                .apply { ids.forEach { putLong("attempt_$it", System.currentTimeMillis()) } }.apply()
+            showLoading(context, manager, ids)
+            enqueue(context, ids)
+        }
     }
 
-    private fun enqueue(context: Context) {
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            "weather-widget", ExistingWorkPolicy.KEEP,
-            OneTimeWorkRequestBuilder<WeatherWidgetWorker>().build()
-        )
+    override fun onDeleted(context: Context, ids: IntArray) {
+        context.getSharedPreferences("widget_schedule", Context.MODE_PRIVATE).edit()
+            .apply { ids.forEach { remove("attempt_$it") } }.apply()
     }
+
+    private fun showLoading(context: Context, manager: AppWidgetManager, ids: IntArray) {
+        val saved = cities.loadCities().ifEmpty { cities.defaultCities }
+        val label = saved.getOrNull(cities.selectedIndex(saved.size))?.label.orEmpty()
+        ids.forEach { id ->
+            val views = WidgetViews.loading(context, label)
+            WidgetLayout.apply(context, manager.getAppWidgetOptions(id), views, hasQuote = false)
+            manager.updateAppWidget(id, views)
+        }
+    }
+
+    private fun restore(context: Context, manager: AppWidgetManager, ids: IntArray): Boolean {
+        val (views, hasQuote) = WidgetViews.restored(context) ?: return false
+        ids.forEach { id ->
+            WidgetLayout.apply(context, manager.getAppWidgetOptions(id), views, hasQuote)
+            manager.updateAppWidget(id, views)
+        }
+        return true
+    }
+
+    private fun enqueue(context: Context, ids: IntArray) {
+        if (ids.isEmpty()) return
+        val request = OneTimeWorkRequestBuilder<WeatherWidgetWorker>()
+            .setInputData(workDataOf(WeatherWidgetWorker.WIDGET_IDS to ids))
+        ids.forEach { request.addTag("widget-$it") }
+        // Earlier Android versions require a foreground service for expedited work.
+        if (Build.VERSION.SDK_INT >= 31) {
+            request.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+        }
+        val pending = goAsync()
+        scheduling.execute {
+            try {
+                WorkManager.getInstance(context).enqueueUniqueWork("weather-widget",
+                    ExistingWorkPolicy.APPEND_OR_REPLACE, request.build()).result.get(8, TimeUnit.SECONDS)
+            } catch (failure: Exception) {
+                android.util.Log.w("WeatherWidget", "Widget scheduling failed", failure)
+                val manager = AppWidgetManager.getInstance(context)
+                ids.forEach { id ->
+                    val views = WidgetViews.loading(context, context.getString(com.valerie.meteoquote.R.string.app_name))
+                    views.setTextViewText(com.valerie.meteoquote.R.id.widget_temp, "—")
+                    views.setTextViewText(com.valerie.meteoquote.R.id.widget_condition, "Ouvrir l’application")
+                    views.setContentDescription(com.valerie.meteoquote.R.id.widget_content, "Actualisation indisponible. Ouvrir l’application.")
+                    WidgetLayout.apply(context, manager.getAppWidgetOptions(id), views, hasQuote = false)
+                    manager.updateAppWidget(id, views)
+                }
+            } finally { pending.finish() }
+        }
+    }
+
+    private companion object { val scheduling = Executors.newSingleThreadExecutor() }
 }

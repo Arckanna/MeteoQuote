@@ -23,6 +23,7 @@ class WidgetLayoutTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {
             for ((name, width, height, font) in listOf(
+                Profile("tiny", 180, 60, 1f),
                 Profile("compact", 180, 80, 1f),
                 Profile("expanded", 280, 160, 1f),
                 Profile("large-text", 320, 160, 2f))) {
@@ -37,7 +38,7 @@ class WidgetLayoutTest {
                     setTextViewText(R.id.widget_temp, "−12°")
                     setTextViewText(R.id.widget_condition, "Plutôt nuageux")
                     setTextViewText(R.id.widget_quote, "Au-dessus des nuages, le ciel est toujours bleu. — Proverbe")
-                    setViewVisibility(R.id.widget_quote, if (showQuote) View.VISIBLE else View.GONE)
+                    WidgetLayout.apply(context, options, this, hasQuote = true)
                 }
                 val root = remote.apply(context, null) as ViewGroup
                 val w = (width * density).toInt()
