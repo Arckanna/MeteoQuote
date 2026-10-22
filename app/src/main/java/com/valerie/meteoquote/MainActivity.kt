@@ -71,7 +71,7 @@ class MainActivity : AppCompatActivity() {
     ) { perms ->
         val granted = perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) {
-            locateAndSelectCity()
+            pendingLocationRequest?.let { locateAndSelectCity(it) }
         } else {
             val showRationaleCoarse = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)
             if (!showRationaleCoarse) {
@@ -191,7 +191,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnLocate)?.setOnClickListener {
-            ensureLocationPermission { locateAndSelectCity() }
+            val request = viewModel.beginLocationRequest()
+            pendingLocationRequest = request
+            ensureLocationPermission { locateAndSelectCity(request) }
         }
 
         val etCitySearch: EditText = findViewById(R.id.etCitySearch)
@@ -202,6 +204,7 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             // Désactiver le bouton pendant la recherche
+            viewModel.cancelLocationRequest()
             findViewById<Button>(R.id.btnAddCity).isEnabled = false
             lifecycleScope.launch {
                 try {
@@ -324,8 +327,8 @@ class MainActivity : AppCompatActivity() {
                     state.uvColor)
                 renderMetric(tvAqi, "Air · AQI européen",
                     if (state.aqiNow >= 0) state.aqiNow.toString() else "—",
-                    if (state.aqiNow >= 0) state.aqiLabel else "Indisponible",
-                    if (state.aqiMaxToday >= 0) "Pic ${state.aqiMaxToday} à ${state.aqiPeakTime ?: "—"}" else "Pic indisponible",
+                    if (state.isAirQualityLoading) "Chargement…" else if (state.aqiNow >= 0) state.aqiLabel else "Indisponible",
+                    if (state.isAirQualityLoading) "" else if (state.aqiMaxToday >= 0) "Pic ${state.aqiMaxToday} à ${state.aqiPeakTime ?: "—"}" else "Pic indisponible",
                     state.aqiColor)
                 // Rendus
                 forecastRenderer.renderHourly(state.hourlyForecasts, light)
@@ -457,8 +460,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var locationJob: kotlinx.coroutines.Job? = null
+    private var pendingLocationRequest: Long? = null
 
-    private fun locateAndSelectCity() {
+    private fun locateAndSelectCity(request: Long) {
         locationJob?.cancel()
         locationJob = lifecycleScope.launch {
             findViewById<Button>(R.id.btnLocate).isEnabled = false
@@ -471,7 +475,7 @@ class MainActivity : AppCompatActivity() {
                 val loc = com.valerie.meteoquote.ui.currentLocation(this@MainActivity)
                 if (loc == null) {
                     Toast.makeText(this@MainActivity, "Position indisponible. Recherchez une ville.", Toast.LENGTH_LONG).show()
-                } else viewModel.detectLocation(loc.latitude, loc.longitude)
+                } else viewModel.detectLocation(loc.latitude, loc.longitude, request)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -484,6 +488,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         locationJob?.cancel()
+        pendingLocationRequest = null
+        viewModel.cancelLocationRequest()
         super.onStop()
     }
     /** Ajoute une ville en tête de la LRU (max 10), sans doublon (lat/lon). */

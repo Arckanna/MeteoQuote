@@ -9,7 +9,7 @@ import java.time.LocalDateTime
 
 class OpenMeteoWeatherRepository(private val transport: HttpTransport = HttpTransport(), private val clock: java.time.Clock = java.time.Clock.systemUTC()) : WeatherRepository {
 
-    override suspend fun fetchWeather(lat: Double, lon: Double): WeatherResult {
+    private suspend fun weatherBody(lat: Double, lon: Double): String {
         val url = "https://api.open-meteo.com/v1/forecast" +
                 "?latitude=$lat&longitude=$lon" +
                 "&current=temperature_2m,weather_code" +
@@ -17,15 +17,31 @@ class OpenMeteoWeatherRepository(private val transport: HttpTransport = HttpTran
                 "&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max" +
                 "&timezone=auto&forecast_days=8"
 
-        val body = transport.get(url)
+        return transport.get(url)
+    }
+
+    /** The widget needs no AQI and must not wait for its service. */
+    override suspend fun fetchWeather(lat: Double, lon: Double): WeatherResult {
+        val body = weatherBody(lat, lon)
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { parseWeather(body) }
+    }
+
+    override fun weatherUpdates(lat: Double, lon: Double) = kotlinx.coroutines.flow.flow {
+        val body = weatherBody(lat, lon)
+        val weather = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { parseWeather(body) }
+        emit(weather.copy(isAirQualityLoading = true))
         val aqBody = try {
-            transport.get("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=$lat&longitude=$lon&hourly=european_aqi&timezone=auto")
+            kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                transport.get("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=$lat&longitude=$lon&hourly=european_aqi&timezone=auto")
+            }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: java.io.IOException) {
             null
         }
-        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { parseWeather(body, aqBody) }
+        val enriched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { parseWeather(body, aqBody) }
+        emit(weather.copy(aqiNow = enriched.aqiNow, aqiMaxToday = enriched.aqiMaxToday,
+            aqiPeakTime = enriched.aqiPeakTime))
     }
 
     internal fun parseWeather(body: String, aqBody: String? = null): WeatherResult {
