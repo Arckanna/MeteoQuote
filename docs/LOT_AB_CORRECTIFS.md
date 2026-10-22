@@ -45,6 +45,8 @@ Une position tardive avec un identifiant périmé ne démarre pas de géocodage.
 
 Ne pas traiter une validation unitaire comme une recette sur appareil. La CI instrumentée, la validation Play et le reste du cache hors ligne restent des tâches distinctes.
 
+Préparation suivante : [Lot C — cache Room et consultation hors ligne](LOT_C_CACHE_HORS_LIGNE.md). Ce plan reprend B01 pour la fraîcheur, B08 pour les erreurs secondaires et B04–B06 pour le widget, en conservant les garanties B02/B03.
+
 ## Vérification de cette livraison
 
 Commande : `gradlew.bat testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug assembleRelease`.
