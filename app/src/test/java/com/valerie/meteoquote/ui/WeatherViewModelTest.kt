@@ -46,6 +46,11 @@ class WeatherViewModelTest {
         // Utiliser un Application réel pour les tests
         application = ApplicationProvider.getApplicationContext<Application>()
         mockWeatherRepository = mockk(relaxed = true)
+        every { mockWeatherRepository.weatherUpdates(any(), any()) } answers {
+            val lat = firstArg<Double>()
+            val lon = secondArg<Double>()
+            kotlinx.coroutines.flow.flow { emit(mockWeatherRepository.fetchWeather(lat, lon)) }
+        }
         mockQuoteRepository = mockk(relaxed = true)
         every { mockQuoteRepository.assignedQuote() } returns null
         mockCityRepository = mockk(relaxed = true)
@@ -68,6 +73,90 @@ class WeatherViewModelTest {
             mockQuoteRepository,
             mockCityRepository
         )
+    }
+
+    @Test fun manualChoiceRejectsPositionReceivedAfterAcquisitionStarted() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val vm = createViewModel()
+        val request = vm.beginLocationRequest()
+        vm.addCity(City("Choix manuel", 45.0, 4.0))
+        vm.detectLocation(48.0, 2.0, request)
+        advanceUntilIdle()
+        assertEquals("Choix manuel", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        coVerify(exactly = 0) { mockCityRepository.reverseGeocode(any(), any()) }
+    }
+
+    @Test fun cancelledOrSupersededAcquisitionCannotStartGeocoding() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        coEvery { mockCityRepository.reverseGeocode(46.0, 3.0) } returns City("Position récente", 46.0, 3.0)
+        val vm = createViewModel()
+        val oldRequest = vm.beginLocationRequest()
+        val newRequest = vm.beginLocationRequest()
+        vm.detectLocation(48.0, 2.0, oldRequest)
+        vm.detectLocation(46.0, 3.0, newRequest)
+        advanceUntilIdle()
+        assertEquals("Position récente", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        coVerify(exactly = 0) { mockCityRepository.reverseGeocode(48.0, 2.0) }
+        val stopped = vm.beginLocationRequest()
+        vm.cancelLocationRequest()
+        vm.detectLocation(49.0, 1.0, stopped)
+        advanceUntilIdle()
+        coVerify(exactly = 0) { mockCityRepository.reverseGeocode(49.0, 1.0) }
+    }
+
+    @Test fun weatherRemainsUsableWhileAirQualityLoadsWithoutChangingTimestamp() = runTest(testDispatcher) {
+        val result = createMockWeatherResult()
+        every { mockWeatherRepository.weatherUpdates(any(), any()) } returns kotlinx.coroutines.flow.flow {
+            emit(result.copy(aqiNow = -1, isAirQualityLoading = true))
+            kotlinx.coroutines.delay(4_000)
+            emit(result)
+        }
+        val vm = createViewModel()
+        runCurrent()
+        assertFalse(vm.uiState.value.isLoading)
+        assertTrue(vm.uiState.value.isAirQualityLoading)
+        assertEquals(20.5, vm.uiState.value.currentTemp!!, 0.001)
+        val timestamp = vm.uiState.value.updatedAt
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.isAirQualityLoading)
+        assertEquals(30, vm.uiState.value.aqiNow)
+        assertEquals(timestamp, vm.uiState.value.updatedAt)
+    }
+
+    @Test fun switchingCityCancelsOldAirQualityAndClearsItsValues() = runTest(testDispatcher) {
+        val cities = listOf(City("Paris", 48.0, 2.0), City("Lyon", 45.0, 4.0))
+        every { mockCityRepository.loadCities() } returns cities
+        var oldCancelled = false
+        every { mockWeatherRepository.weatherUpdates(48.0, 2.0) } returns kotlinx.coroutines.flow.flow {
+            emit(createMockWeatherResult().copy(aqiNow = -1, isAirQualityLoading = true))
+            try {
+                kotlinx.coroutines.delay(4_000)
+                emit(createMockWeatherResult().copy(aqiNow = 99))
+            } finally { oldCancelled = true }
+        }
+        every { mockWeatherRepository.weatherUpdates(45.0, 4.0) } returns kotlinx.coroutines.flow.flowOf(
+            createMockWeatherResult().copy(current = 10.0 to 3, aqiNow = -1))
+        val vm = createViewModel()
+        runCurrent()
+        vm.selectCity(1)
+        advanceUntilIdle()
+        assertTrue(oldCancelled)
+        assertEquals(10.0, vm.uiState.value.currentTemp!!, 0.001)
+        assertEquals(-1, vm.uiState.value.aqiNow)
+        assertFalse(vm.uiState.value.isAirQualityLoading)
+    }
+
+    @Test fun optionalEnrichmentFailureKeepsVisibleWeather() = runTest(testDispatcher) {
+        every { mockWeatherRepository.weatherUpdates(any(), any()) } returns kotlinx.coroutines.flow.flow {
+            emit(createMockWeatherResult().copy(aqiNow = -1, isAirQualityLoading = true))
+            throw java.io.IOException("Air service unavailable")
+        }
+        val vm = createViewModel()
+        advanceUntilIdle()
+        assertEquals(20.5, vm.uiState.value.currentTemp!!, 0.001)
+        assertEquals(null, vm.uiState.value.error)
+        assertFalse(vm.uiState.value.isAirQualityLoading)
+        assertFalse(vm.uiState.value.isLoading)
     }
 
     @Test

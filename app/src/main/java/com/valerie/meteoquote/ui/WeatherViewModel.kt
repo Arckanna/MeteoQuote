@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 data class WeatherUiState(
     val updatedAt: java.time.Instant? = null,
     val isLoading: Boolean = false,
+    val isAirQualityLoading: Boolean = false,
     val error: String? = null,
     val errorKind: WeatherErrorKind? = null,
     val currentTemp: Double? = null,
@@ -28,8 +29,8 @@ data class WeatherUiState(
     val uvPeakTime: String? = null,
     val uvLabel: String = "",
     val uvColor: Int = 0,
-    val aqiNow: Int = 0,
-    val aqiMaxToday: Int = 0,
+    val aqiNow: Int = -1,
+    val aqiMaxToday: Int = -1,
     val aqiPeakTime: String? = null,
     val aqiLabel: String = "",
     val aqiColor: Int = 0,
@@ -48,6 +49,18 @@ class WeatherViewModel @javax.inject.Inject constructor(
 
     private var weatherJob: kotlinx.coroutines.Job? = null
     private var locationJob: kotlinx.coroutines.Job? = null
+    private var locationIntent = 0L
+
+    /** Token spans permission/acquisition and reverse geocoding. Manual choices invalidate it. */
+    fun beginLocationRequest(): Long {
+        cancelLocationRequest()
+        return locationIntent
+    }
+
+    fun cancelLocationRequest() {
+        locationIntent++
+        locationJob?.cancel()
+    }
     private val _uiState = MutableStateFlow(WeatherUiState(quote = quoteRepository.assignedQuote() ?: "—"))
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
 
@@ -78,46 +91,56 @@ class WeatherViewModel @javax.inject.Inject constructor(
         }
 
         weatherJob?.cancel()
-        _uiState.value = _uiState.value.copy(isLoading = true, error = null, errorKind = null)
+        _uiState.value = _uiState.value.copy(isLoading = true, isAirQualityLoading = false,
+            error = null, errorKind = null)
 
         weatherJob = viewModelScope.launch {
+            var fetchedAt: java.time.Instant? = null
             try {
-                val result = weatherRepository.fetchWeather(targetCity.lat, targetCity.lon)
-                val (temp, code) = result.current
-                val condition = WeatherUtils.wmoToLabel(code)
-                val quote = quoteRepository.getQuote(code)
+                weatherRepository.weatherUpdates(targetCity.lat, targetCity.lon).collect { result ->
+                    if (fetchedAt == null) fetchedAt = java.time.Instant.now()
+                    val (temp, code) = result.current
+                    val condition = WeatherUtils.wmoToLabel(code)
+                    val quote = quoteRepository.getQuote(code)
 
-                val (uvLabel, uvColor) = WeatherUtils.uvCategory(getApplication(), result.uvMaxToday)
-                val uvPeakTime = result.uvPeakTime?.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+                    val (uvLabel, uvColor) = WeatherUtils.uvCategory(getApplication(), result.uvMaxToday)
+                    val uvPeakTime = result.uvPeakTime?.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
 
-                val (aqiLabel, aqiColor) = WeatherUtils.aqiCategoryEU(getApplication(), result.aqiNow)
-                val aqiPeakTime = result.aqiPeakTime?.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+                    val (aqiLabel, aqiColor) = WeatherUtils.aqiCategoryEU(getApplication(), result.aqiNow)
+                    val aqiPeakTime = result.aqiPeakTime?.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
 
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = null,
-                    errorKind = null,
-                    updatedAt = java.time.Instant.now(),
-                    currentTemp = temp,
-                    weatherCode = code,
-                    condition = condition,
-                    hourlyForecasts = result.hourly,
-                    dailyForecasts = result.daily,
-                    uvNow = result.uvNow,
-                    uvMaxToday = result.uvMaxToday,
-                    uvPeakTime = uvPeakTime,
-                    uvLabel = uvLabel,
-                    uvColor = uvColor,
-                    aqiNow = result.aqiNow,
-                    aqiMaxToday = result.aqiMaxToday,
-                    aqiPeakTime = aqiPeakTime,
-                    aqiLabel = aqiLabel,
-                    aqiColor = aqiColor,
-                    quote = quote
-                )
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isAirQualityLoading = result.isAirQualityLoading,
+                        error = null,
+                        errorKind = null,
+                        updatedAt = fetchedAt,
+                        currentTemp = temp,
+                        weatherCode = code,
+                        condition = condition,
+                        hourlyForecasts = result.hourly,
+                        dailyForecasts = result.daily,
+                        uvNow = result.uvNow,
+                        uvMaxToday = result.uvMaxToday,
+                        uvPeakTime = uvPeakTime,
+                        uvLabel = uvLabel,
+                        uvColor = uvColor,
+                        aqiNow = result.aqiNow,
+                        aqiMaxToday = result.aqiMaxToday,
+                        aqiPeakTime = aqiPeakTime,
+                        aqiLabel = aqiLabel,
+                        aqiColor = aqiColor,
+                        quote = quote
+                    )
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // Once weather is visible, an optional enrichment failure must not erase it.
+                if (fetchedAt != null) {
+                    _uiState.value = _uiState.value.copy(isAirQualityLoading = false)
+                    return@launch
+                }
                 val failure = WeatherFailure.from(e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -131,7 +154,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
 
     fun selectCity(index: Int, cancelDetection: Boolean = true) {
         if (index in _uiState.value.cities.indices) {
-            if (cancelDetection) locationJob?.cancel()
+            if (cancelDetection) cancelLocationRequest()
             cityRepository.saveSelectedIndex(index)
             _uiState.value = _uiState.value.copy(selectedCityIndex = index)
             refreshWeather(_uiState.value.cities[index])
@@ -152,7 +175,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
     }
 
     fun removeCity(index: Int) {
-        locationJob?.cancel()
+        cancelLocationRequest()
         val currentCities = _uiState.value.cities.toMutableList()
         if (index in currentCities.indices && currentCities.size > 1) {
             currentCities.removeAt(index)
@@ -178,12 +201,14 @@ class WeatherViewModel @javax.inject.Inject constructor(
         _uiState.value = state.copy(quote = quoteRepository.getQuote(code))
     }
 
-    fun detectLocation(lat: Double, lon: Double) {
+    fun detectLocation(lat: Double, lon: Double, request: Long = beginLocationRequest()) {
+        if (request != locationIntent) return
         locationJob?.cancel()
         locationJob = viewModelScope.launch {
             try {
                 val detected = cityRepository.reverseGeocode(lat, lon)
                     ?: City("Ma position", lat, lon)
+                if (request != locationIntent) return@launch
                 
                 val currentCities = _uiState.value.cities.toMutableList()
                 val existingIndex = currentCities.indexOfFirst { 
@@ -204,6 +229,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (request != locationIntent) return@launch
                 _uiState.value = _uiState.value.copy(
                     error = "Localisation indisponible. Recherchez une ville.",
                     errorKind = null

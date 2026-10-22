@@ -25,5 +25,6 @@ data class WeatherResult(
     val uvPeakTime: LocalDateTime?,
     val aqiNow: Int,
     val aqiMaxToday: Int,
-    val aqiPeakTime: LocalDateTime?
+    val aqiPeakTime: LocalDateTime?,
+    val isAirQualityLoading: Boolean = false
 )
