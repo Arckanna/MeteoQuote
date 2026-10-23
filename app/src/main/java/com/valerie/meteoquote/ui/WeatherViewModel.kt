@@ -17,6 +17,10 @@ data class WeatherUiState(
     val updatedAt: java.time.Instant? = null,
     val isLoading: Boolean = false,
     val isAirQualityLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
+    val notice: String? = null,
+    val isOld: Boolean = false,
+    val airFetchedAt: java.time.Instant? = null,
     val error: String? = null,
     val errorKind: WeatherErrorKind? = null,
     val currentTemp: Double? = null,
@@ -44,12 +48,22 @@ class WeatherViewModel @javax.inject.Inject constructor(
     application: Application,
     private val weatherRepository: WeatherRepository,
     private val quoteRepository: QuoteRepository,
-    private val cityRepository: CityRepository
+    private val cityRepository: CityRepository,
+    private val clock: java.time.Clock = java.time.Clock.systemUTC()
 ) : AndroidViewModel(application) {
 
     private var weatherJob: kotlinx.coroutines.Job? = null
     private var locationJob: kotlinx.coroutines.Job? = null
     private var locationIntent = 0L
+    private var displayedPlace: String? = null
+    private var lastAttempt: java.time.Instant? = null
+    private fun updateWidgets() {
+        val app = getApplication<Application>()
+        val component = android.content.ComponentName(app, com.valerie.meteoquote.widget.WeatherWidgetProvider::class.java)
+        if (android.appwidget.AppWidgetManager.getInstance(app).getAppWidgetIds(component).isEmpty()) return
+        app.sendBroadcast(android.content.Intent(app, com.valerie.meteoquote.widget.WeatherWidgetProvider::class.java)
+            .setAction(com.valerie.meteoquote.widget.WidgetViews.ACTION_RENDER))
+    }
 
     /** Token spans permission/acquisition and reverse geocoding. Manual choices invalidate it. */
     fun beginLocationRequest(): Long {
@@ -74,11 +88,11 @@ class WeatherViewModel @javax.inject.Inject constructor(
         val index = cityRepository.selectedIndex(cities.size)
         _uiState.value = _uiState.value.copy(cities = cities, selectedCityIndex = index)
         if (cities.isNotEmpty()) {
-            refreshWeather(cities[index])
+            refreshWeather(cities[index], force = false)
         }
     }
 
-    fun refreshWeather(city: City? = null) {
+    fun refreshWeather(city: City? = null, force: Boolean = true) {
         val targetCity = city ?: _uiState.value.cities.getOrNull(_uiState.value.selectedCityIndex)
         if (targetCity == null) {
             _uiState.value = _uiState.value.copy(
@@ -91,17 +105,29 @@ class WeatherViewModel @javax.inject.Inject constructor(
         }
 
         weatherJob?.cancel()
-        _uiState.value = _uiState.value.copy(isLoading = true, isAirQualityLoading = false,
-            error = null, errorKind = null)
+        val key = com.valerie.meteoquote.data.CachePolicy.key(targetCity.lat, targetCity.lon)
+        val samePlace = displayedPlace == key && _uiState.value.updatedAt?.let {
+            com.valerie.meteoquote.data.CachePolicy.usable(it.toEpochMilli(), clock.instant())
+        } != false
+        displayedPlace = key
+        lastAttempt = clock.instant()
+        _uiState.value = if (samePlace) _uiState.value.copy(
+            isLoading = _uiState.value.currentTemp == null, isRefreshing = true,
+            isAirQualityLoading = false, error = null, errorKind = null, notice = null)
+        else WeatherUiState(cities = _uiState.value.cities, selectedCityIndex = _uiState.value.selectedCityIndex,
+            quote = _uiState.value.quote, isLoading = true, isRefreshing = true)
 
         weatherJob = viewModelScope.launch {
             var fetchedAt: java.time.Instant? = null
             try {
-                weatherRepository.weatherUpdates(targetCity.lat, targetCity.lon).collect { result ->
-                    if (fetchedAt == null) fetchedAt = java.time.Instant.now()
+                weatherRepository.refreshUpdates(targetCity.lat, targetCity.lon, force).collect { result ->
+                    val notifyWidgets = !result.isRefreshing && !result.isAirQualityLoading &&
+                        (_uiState.value.isRefreshing || _uiState.value.isAirQualityLoading ||
+                            _uiState.value.updatedAt != result.fetchedAt)
+                    if (fetchedAt == null) fetchedAt = clock.instant()
                     val (temp, code) = result.current
                     val condition = WeatherUtils.wmoToLabel(code)
-                    val quote = quoteRepository.getQuote(code)
+                    val quote = quoteRepository.getQuote(code.takeUnless { result.isOld })
 
                     val (uvLabel, uvColor) = WeatherUtils.uvCategory(getApplication(), result.uvMaxToday)
                     val uvPeakTime = result.uvPeakTime?.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
@@ -112,9 +138,13 @@ class WeatherViewModel @javax.inject.Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         isAirQualityLoading = result.isAirQualityLoading,
+                        isRefreshing = result.isRefreshing,
+                        notice = result.refreshError,
+                        isOld = result.isOld,
+                        airFetchedAt = result.airFetchedAt,
                         error = null,
                         errorKind = null,
-                        updatedAt = fetchedAt,
+                        updatedAt = result.fetchedAt ?: fetchedAt,
                         currentTemp = temp,
                         weatherCode = code,
                         condition = condition,
@@ -132,18 +162,23 @@ class WeatherViewModel @javax.inject.Inject constructor(
                         aqiColor = aqiColor,
                         quote = quote
                     )
+                    if (notifyWidgets) updateWidgets()
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // Once weather is visible, an optional enrichment failure must not erase it.
-                if (fetchedAt != null) {
-                    _uiState.value = _uiState.value.copy(isAirQualityLoading = false)
+                if (_uiState.value.currentTemp != null) {
+                    _uiState.value = _uiState.value.copy(isAirQualityLoading = false,
+                        isLoading = false, isRefreshing = false,
+                        notice = if (e is com.valerie.meteoquote.data.WeatherStorageException) "Stockage météo indisponible"
+                            else "Actualisation impossible. Dernières données conservées.")
                     return@launch
                 }
                 val failure = WeatherFailure.from(e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
+                    isRefreshing = false,
                     error = failure.message,
                     errorKind = failure.kind,
                     quote = quoteRepository.getQuote(null)
@@ -156,8 +191,9 @@ class WeatherViewModel @javax.inject.Inject constructor(
         if (index in _uiState.value.cities.indices) {
             if (cancelDetection) cancelLocationRequest()
             cityRepository.saveSelectedIndex(index)
+            updateWidgets()
             _uiState.value = _uiState.value.copy(selectedCityIndex = index)
-            refreshWeather(_uiState.value.cities[index])
+            refreshWeather(_uiState.value.cities[index], force = false)
         }
     }
 
@@ -186,6 +222,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
                 selectedCityIndex = newIndex
             )
             cityRepository.saveSelectedIndex(newIndex)
+            updateWidgets()
             if (currentCities.isNotEmpty()) {
                 refreshWeather(currentCities[newIndex])
             }
@@ -199,6 +236,14 @@ class WeatherViewModel @javax.inject.Inject constructor(
         if (state.isLoading) return
         val code = state.weatherCode.takeIf { state.error == null && state.currentTemp != null }
         _uiState.value = state.copy(quote = quoteRepository.getQuote(code))
+    }
+
+    /** Re-read stored series as time passes, including on returning to the foreground. */
+    fun refreshVisibleWeather() {
+        val state = _uiState.value
+        if (state.isLoading || state.isRefreshing || state.isAirQualityLoading) return
+        if (lastAttempt?.let { java.time.Duration.between(it, clock.instant()).seconds in 0 until 60 } == true) return
+        refreshWeather(force = false)
     }
 
     fun detectLocation(lat: Double, lon: Double, request: Long = beginLocationRequest()) {
@@ -231,8 +276,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
             } catch (e: Exception) {
                 if (request != locationIntent) return@launch
                 _uiState.value = _uiState.value.copy(
-                    error = "Localisation indisponible. Recherchez une ville.",
-                    errorKind = null
+                    notice = "Localisation indisponible. Recherchez une ville."
                 )
             }
         }

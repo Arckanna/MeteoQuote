@@ -241,6 +241,7 @@ class MainActivity : AppCompatActivity() {
                 launch {
                     while (true) {
                         viewModel.refreshDailyQuote()
+                        viewModel.refreshVisibleWeather()
                         kotlinx.coroutines.delay(60_000)
                     }
                 }
@@ -265,16 +266,16 @@ class MainActivity : AppCompatActivity() {
         // Activer/désactiver le bouton de suppression selon le nombre de villes
         findViewById<Button>(R.id.btnDeleteCity)?.isEnabled = state.cities.size > 1
 
-        findViewById<Button>(R.id.btnRefresh).isEnabled = !state.isLoading
-        findViewById<Button>(R.id.btnRefresh).visibility = if (state.error == null) View.VISIBLE else View.GONE
+        findViewById<Button>(R.id.btnRefresh).isEnabled = !state.isLoading && !state.isRefreshing
+        findViewById<Button>(R.id.btnRefresh).visibility = if (state.error == null && state.notice == null) View.VISIBLE else View.GONE
         findViewById<Button>(R.id.btnRetry).apply {
-            visibility = if (state.error != null && !state.isLoading) View.VISIBLE else View.GONE
-            isEnabled = !state.isLoading
+            visibility = if ((state.error != null || state.notice != null) && !state.isLoading) View.VISIBLE else View.GONE
+            isEnabled = !state.isLoading && !state.isRefreshing
         }
-        findViewById<TextView>(R.id.tvUpdated).text = if (state.isLoading || state.error != null) "" else state.updatedAt?.let {
-            "Actualisé le " + DateTimeFormatter.ofPattern("dd/MM HH:mm", Locale.FRANCE)
-                .withZone(java.time.ZoneId.systemDefault()).format(it)
-        } ?: ""
+        findViewById<TextView>(R.id.tvUpdated).text = listOfNotNull(
+            state.updatedAt?.let { com.valerie.meteoquote.data.CachePolicy.label(it, java.time.Instant.now()) },
+            "Mise à jour…".takeIf { state.isRefreshing && state.currentTemp != null },
+            state.notice).joinToString(" · ")
         // Gestion du chargement
         if (state.isLoading) {
             containerHourly.removeAllViews()
@@ -327,7 +328,9 @@ class MainActivity : AppCompatActivity() {
                     state.uvColor)
                 renderMetric(tvAqi, "Air · AQI européen",
                     if (state.aqiNow >= 0) state.aqiNow.toString() else "—",
-                    if (state.isAirQualityLoading) "Chargement…" else if (state.aqiNow >= 0) state.aqiLabel else "Indisponible",
+                    if (state.isAirQualityLoading) "Chargement…" else if (state.aqiNow >= 0) state.aqiLabel +
+                        (state.airFetchedAt?.takeIf { !com.valerie.meteoquote.data.CachePolicy.fresh(it.toEpochMilli(), java.time.Instant.now()) }
+                            ?.let { " · " + com.valerie.meteoquote.data.CachePolicy.label(it, java.time.Instant.now()) } ?: "") else "Indisponible",
                     if (state.isAirQualityLoading) "" else if (state.aqiMaxToday >= 0) "Pic ${state.aqiMaxToday} à ${state.aqiPeakTime ?: "—"}" else "Pic indisponible",
                     state.aqiColor)
                 // Rendus

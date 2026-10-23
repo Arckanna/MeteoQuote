@@ -1,0 +1,91 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "9b07d7a0934e8dab91bc8275a82e970c",
+    "entities": [
+      {
+        "tableName": "weather_snapshot",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`placeKey` TEXT NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `zoneId` TEXT NOT NULL, `fetchedAt` INTEGER NOT NULL, `payload` TEXT NOT NULL, PRIMARY KEY(`placeKey`))",
+        "fields": [
+          {
+            "fieldPath": "placeKey",
+            "columnName": "placeKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zoneId",
+            "columnName": "zoneId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fetchedAt",
+            "columnName": "fetchedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payload",
+            "columnName": "payload",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "placeKey"
+          ]
+        }
+      },
+      {
+        "tableName": "air_snapshot",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`placeKey` TEXT NOT NULL, `fetchedAt` INTEGER NOT NULL, `payload` TEXT NOT NULL, PRIMARY KEY(`placeKey`))",
+        "fields": [
+          {
+            "fieldPath": "placeKey",
+            "columnName": "placeKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fetchedAt",
+            "columnName": "fetchedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payload",
+            "columnName": "payload",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "placeKey"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9b07d7a0934e8dab91bc8275a82e970c')"
+    ]
+  }
+}

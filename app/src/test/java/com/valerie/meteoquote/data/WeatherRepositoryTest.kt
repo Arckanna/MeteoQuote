@@ -8,6 +8,18 @@ import java.time.ZoneOffset
 import kotlinx.coroutines.flow.toList
 
 class WeatherRepositoryTest {
+    @Test fun repeatedAutumnHourUsesTheCorrectInstant() {
+        val root = org.json.JSONObject(body)
+        val hour = root.getJSONObject("hourly")
+        hour.put("time", org.json.JSONArray(listOf(
+            Instant.parse("2026-10-25T00:00:00Z").epochSecond,
+            Instant.parse("2026-10-25T01:00:00Z").epochSecond)))
+        val result = OpenMeteoWeatherRepository(clock = Clock.fixed(
+            Instant.parse("2026-10-25T01:30:00Z"), ZoneOffset.UTC)).parseWeather(root.toString())
+        assertEquals(1, result.hourly.size)
+        assertEquals(19.0, result.hourly.first().temp, 0.001)
+        assertEquals(4.0, result.uvNow, 0.001)
+    }
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test fun weatherIsEmittedBeforeSlowAirQualityAndAirWaitIsBounded() = kotlinx.coroutines.test.runTest {
         val transport = io.mockk.mockk<HttpTransport>()

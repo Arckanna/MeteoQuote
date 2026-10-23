@@ -46,6 +46,9 @@ class WeatherViewModelTest {
         // Utiliser un Application réel pour les tests
         application = ApplicationProvider.getApplicationContext<Application>()
         mockWeatherRepository = mockk(relaxed = true)
+        every { mockWeatherRepository.refreshUpdates(any(), any(), any()) } answers {
+            mockWeatherRepository.weatherUpdates(firstArg(), secondArg())
+        }
         every { mockWeatherRepository.weatherUpdates(any(), any()) } answers {
             val lat = firstArg<Double>()
             val lon = secondArg<Double>()
@@ -157,6 +160,39 @@ class WeatherViewModelTest {
         assertEquals(null, vm.uiState.value.error)
         assertFalse(vm.uiState.value.isAirQualityLoading)
         assertFalse(vm.uiState.value.isLoading)
+    }
+
+    @Test fun failedRefreshKeepsCachedWeatherAndItsOriginalDate() = runTest(testDispatcher) {
+        val storedAt = java.time.Instant.now().minusSeconds(3600)
+        every { mockWeatherRepository.weatherUpdates(any(), any()) } returns kotlinx.coroutines.flow.flowOf(
+            createMockWeatherResult().copy(fetchedAt = storedAt))
+        val vm = createViewModel()
+        advanceUntilIdle()
+        assertEquals(storedAt, vm.uiState.value.updatedAt)
+        every { mockWeatherRepository.weatherUpdates(any(), any()) } returns kotlinx.coroutines.flow.flow {
+            throw java.io.IOException("Offline")
+        }
+        vm.refreshWeather()
+        assertFalse(vm.uiState.value.isLoading)
+        assertTrue(vm.uiState.value.isRefreshing)
+        advanceUntilIdle()
+        assertEquals(storedAt, vm.uiState.value.updatedAt)
+        assertEquals(20.5, vm.uiState.value.currentTemp!!, 0.001)
+        assertEquals(null, vm.uiState.value.error)
+        assertTrue(vm.uiState.value.notice!!.contains("conservées"))
+        assertFalse(vm.uiState.value.isRefreshing)
+    }
+
+    @Test fun selectingUncachedCityNeverRetainsPreviousTemperature() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val vm = createViewModel()
+        advanceUntilIdle()
+        coEvery { mockWeatherRepository.fetchWeather(45.0, 4.0) } throws java.io.IOException()
+        vm.addCity(City("Sans cache", 45.0, 4.0))
+        assertEquals(null, vm.uiState.value.currentTemp)
+        advanceUntilIdle()
+        assertEquals(null, vm.uiState.value.currentTemp)
+        assertTrue(vm.uiState.value.error != null)
     }
 
     @Test

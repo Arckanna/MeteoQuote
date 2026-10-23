@@ -9,33 +9,25 @@ import com.valerie.meteoquote.R
 
 internal object WidgetViews {
     const val ACTION_REFRESH = "com.valerie.meteoquote.ACTION_REFRESH"
+    const val ACTION_RENDER = "com.valerie.meteoquote.ACTION_RENDER"
 
-    /** Last rendered widget state, used when a launcher rebuilds the view after PACKAGE_CHANGED. */
-    fun remember(context: Context, city: String, temperature: String, condition: String, code: Int, quote: String?) {
-        val state = org.json.JSONObject().put("city", city).put("temperature", temperature)
-            .put("condition", condition).put("code", code).put("quote", quote.orEmpty())
-        context.getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE).edit()
-            .putString("widget_render_v1", state.toString()).apply()
+    fun rendered(context: Context, city: String, result: com.valerie.meteoquote.data.model.WeatherResult?,
+        quote: String, failure: String? = null): RemoteViews = loading(context, city).apply {
+        val temp = result?.current?.first?.let { String.format(java.util.Locale.FRANCE, "%.0f°", it) } ?: "—°"
+        val condition = result?.let { com.valerie.meteoquote.util.WeatherUtils.wmoToLabel(it.current.second) }
+            ?: "Aucune météo enregistrée"
+        val now = java.time.Instant.now()
+        val age = result?.fetchedAt?.let { com.valerie.meteoquote.data.CachePolicy.label(it, now) }
+        val status = listOfNotNull(age, condition, failure).joinToString(" · ")
+        if (result?.fetchedAt?.let { !com.valerie.meteoquote.data.CachePolicy.fresh(it.toEpochMilli(), now) } == true)
+            setTextViewText(R.id.widget_city, "Ancien · $city")
+        setTextViewText(R.id.widget_temp, temp)
+        setTextViewText(R.id.widget_condition, status)
+        setTextViewText(R.id.widget_quote, quote)
+        setImageViewResource(R.id.widget_icon, com.valerie.meteoquote.util.WeatherUtils.wmoToIconRes(result?.current?.second ?: 3))
+        setContentDescription(R.id.widget_temp, "$temp Celsius")
+        setContentDescription(R.id.widget_content, "$city, $temp Celsius, $status, $quote")
     }
-
-    fun restored(context: Context): Pair<RemoteViews, Boolean>? = try {
-        val json = context.getSharedPreferences("meteoquote_prefs", Context.MODE_PRIVATE)
-            .getString("widget_render_v1", null)
-        if (json == null) null else {
-            val state = org.json.JSONObject(json)
-            val city = state.getString("city")
-            val temperature = state.getString("temperature")
-            val condition = state.getString("condition")
-            val quote = state.optString("quote")
-            loading(context, city).apply {
-                setTextViewText(R.id.widget_temp, temperature)
-                setTextViewText(R.id.widget_condition, condition)
-                setTextViewText(R.id.widget_quote, quote)
-                setImageViewResource(R.id.widget_icon, com.valerie.meteoquote.util.WeatherUtils.wmoToIconRes(state.getInt("code")))
-                setContentDescription(R.id.widget_content, "$city, $temperature Celsius, $condition")
-            } to quote.isNotEmpty()
-        }
-    } catch (_: org.json.JSONException) { null } catch (_: ClassCastException) { null }
 
     fun loading(context: Context, city: String): RemoteViews =
         RemoteViews(context.packageName, R.layout.widget_weather).apply {

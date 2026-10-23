@@ -129,7 +129,7 @@ class UiLayoutTest {
                 activity.findViewById<View>(R.id.btnRetry).performClick()
                 val modelField = MainActivity::class.java.getDeclaredField("viewModel").apply { isAccessible = true }
                 val model = modelField.get(activity) as com.valerie.meteoquote.ui.WeatherViewModel
-                assertTrue("Retry must start a new load", model.uiState.value.isLoading)
+                assertTrue("Retry must start a refresh", model.uiState.value.isRefreshing)
                 assertNull(model.uiState.value.error)
                 show(state().copy(error = "unexpected end of stream on https://api.example.invalid"))
                 assertEquals("Météo indisponible. Réessayez dans un instant.",

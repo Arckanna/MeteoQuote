@@ -11,6 +11,11 @@ enum class WeatherErrorKind { CONNECTION, TIMEOUT, RATE_LIMITED, HTTP, INVALID_D
 data class WeatherFailure(val kind: WeatherErrorKind, val message: String) {
     companion object {
         fun from(error: Exception): WeatherFailure = when (error) {
+            is com.valerie.meteoquote.data.NoCachedWeatherException -> from(error.failure).let {
+                it.copy(message = "Aucune météo enregistrée pour cette ville. " + it.message)
+            }
+            is com.valerie.meteoquote.data.WeatherStorageException -> WeatherFailure(WeatherErrorKind.UNKNOWN,
+                "Stockage météo indisponible. Réessayez.")
             is HttpStatusException -> when (error.statusCode) {
                 429 -> WeatherFailure(WeatherErrorKind.RATE_LIMITED, "Trop de demandes. Réessayez un peu plus tard.")
                 404 -> WeatherFailure(WeatherErrorKind.HTTP, "Données météo introuvables (HTTP 404).")
