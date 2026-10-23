@@ -19,8 +19,8 @@ android {
         applicationId = "com.valerie.meteoquote"
         minSdk = 24
         targetSdk = 36
-        versionCode = 20
-        versionName = "7.2"
+        versionCode = 21
+        versionName = "7.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
