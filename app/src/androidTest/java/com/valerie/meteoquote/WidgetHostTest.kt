@@ -95,7 +95,8 @@ class WidgetHostTest {
                 File(dir, "actual-host.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
                 bitmap.recycle()
             }
-            val beforeRefresh = workManager.getWorkInfosByTag("widget-$id").get().size
+            // KEEP replaces a completed unique work's history; compare identities, not a growing chain.
+            val beforeRefresh = workManager.getWorkInfosByTag("widget-$id").get().map { it.id }.toSet()
             instrumentation.runOnMainSync {
                 val refresh = requireNotNull(hostView).findViewById<View>(R.id.widget_refresh)
                 assertTrue("Refresh action must survive rebuilding", refresh.hasOnClickListeners())
@@ -103,11 +104,11 @@ class WidgetHostTest {
             }
             val refreshDeadline = SystemClock.elapsedRealtime() + 10_000
             while (SystemClock.elapsedRealtime() < refreshDeadline &&
-                workManager.getWorkInfosByTag("widget-$id").get().size <= beforeRefresh) {
+                workManager.getWorkInfosByTag("widget-$id").get().none { it.id !in beforeRefresh }) {
                 SystemClock.sleep(100)
             }
             assertTrue("Manual refresh must still enqueue work",
-                workManager.getWorkInfosByTag("widget-$id").get().size > beforeRefresh)
+                workManager.getWorkInfosByTag("widget-$id").get().any { it.id !in beforeRefresh })
         } finally {
             host.stopListening()
             host.deleteAppWidgetId(id)

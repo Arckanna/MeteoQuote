@@ -9,16 +9,19 @@ import java.time.LocalDateTime
 
 class OpenMeteoWeatherRepository(private val transport: HttpTransport = HttpTransport(), private val clock: java.time.Clock = java.time.Clock.systemUTC()) : WeatherRepository {
 
-    private suspend fun weatherBody(lat: Double, lon: Double): String {
+    internal suspend fun weatherBody(lat: Double, lon: Double): String {
         val url = "https://api.open-meteo.com/v1/forecast" +
                 "?latitude=$lat&longitude=$lon" +
                 "&current=temperature_2m,weather_code" +
                 "&hourly=temperature_2m,weather_code,uv_index" +
                 "&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max" +
-                "&timezone=auto&forecast_days=8"
+                "&timezone=auto&forecast_days=8&timeformat=unixtime"
 
         return transport.get(url)
     }
+
+    internal suspend fun airBody(lat: Double, lon: Double): String =
+        transport.get("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=$lat&longitude=$lon&hourly=european_aqi&timezone=auto&timeformat=unixtime")
 
     /** The widget needs no AQI and must not wait for its service. */
     override suspend fun fetchWeather(lat: Double, lon: Double): WeatherResult {
@@ -32,7 +35,7 @@ class OpenMeteoWeatherRepository(private val transport: HttpTransport = HttpTran
         emit(weather.copy(isAirQualityLoading = true))
         val aqBody = try {
             kotlinx.coroutines.withTimeoutOrNull(5_000) {
-                transport.get("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=$lat&longitude=$lon&hourly=european_aqi&timezone=auto")
+                airBody(lat, lon)
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -46,7 +49,18 @@ class OpenMeteoWeatherRepository(private val transport: HttpTransport = HttpTran
 
     internal fun parseWeather(body: String, aqBody: String? = null): WeatherResult {
         val root = JSONObject(body)
-        val now = java.time.ZonedDateTime.ofInstant(clock.instant(), java.time.ZoneId.of(root.getString("timezone"))).toLocalDateTime()
+        val zone = java.time.ZoneId.of(root.getString("timezone"))
+        val now = java.time.ZonedDateTime.ofInstant(clock.instant(), zone).toLocalDateTime()
+        fun time(value: Any): LocalDateTime = if (value is Number)
+            java.time.Instant.ofEpochSecond(value.toLong()).atZone(zone).toLocalDateTime()
+        else LocalDateTime.parse(value.toString())
+        fun date(value: Any): LocalDate = if (value is Number) time(value).toLocalDate()
+            else LocalDate.parse(value.toString())
+        val currentHour = clock.instant().atZone(zone).truncatedTo(java.time.temporal.ChronoUnit.HOURS).toInstant()
+        fun current(value: Any) = if (value is Number) java.time.Instant.ofEpochSecond(value.toLong()) == currentHour
+            else time(value) == now.truncatedTo(java.time.temporal.ChronoUnit.HOURS)
+        fun future(value: Any) = if (value is Number) !java.time.Instant.ofEpochSecond(value.toLong()).isBefore(currentHour)
+            else !time(value).isBefore(now.truncatedTo(java.time.temporal.ChronoUnit.HOURS))
         // Current
         val cur = root.getJSONObject("current")
         val currentTemp = cur.getDouble("temperature_2m").also { require(it.isFinite()) }
@@ -59,21 +73,24 @@ class OpenMeteoWeatherRepository(private val transport: HttpTransport = HttpTran
         val hCodes = hourly.getJSONArray("weather_code")
         val hUv = hourly.getJSONArray("uv_index")
         require(listOf(hTemps, hCodes, hUv).all { it.length() == hTimes.length() }) { "Séries horaires incohérentes" }
+        for (values in listOf(hTemps, hCodes, hUv)) for (i in 0 until values.length()) {
+            if (!values.isNull(i)) require(values.getDouble(i).isFinite()) { "Mesure horaire invalide" }
+        }
 
 
         val hList = mutableListOf<HourlyForecast>()
         var uvNow = -1.0
         var grabbedUv = false
         for (i in 0 until hTimes.length()) {
-            val t = LocalDateTime.parse(hTimes.getString(i))
-            if (!grabbedUv && t == now.truncatedTo(java.time.temporal.ChronoUnit.HOURS)) {
+            val t = time(hTimes.get(i))
+            if (!grabbedUv && current(hTimes.get(i))) {
                 uvNow = hUv.optDouble(i, -1.0)
                 grabbedUv = true
             }
-            if (!t.isBefore(now.truncatedTo(java.time.temporal.ChronoUnit.HOURS))) {
-                hList.add(HourlyForecast(t, hTemps.getDouble(i), hCodes.getInt(i)))
+            if (future(hTimes.get(i)) && hList.size < 24) {
+                if (!hTemps.isNull(i) && !hCodes.isNull(i))
+                    hList.add(HourlyForecast(t, hTemps.getDouble(i), hCodes.getInt(i)))
             }
-            if (hList.size >= 24) break
         }
 
         // Seven future days, relative to the selected city's date (not the phone's date).
@@ -84,19 +101,23 @@ class OpenMeteoWeatherRepository(private val transport: HttpTransport = HttpTran
         val dCodes = daily.getJSONArray("weather_code")
         val dUvMax = daily.getJSONArray("uv_index_max")
         require(listOf(dMax, dMin, dCodes, dUvMax).all { it.length() == dTimes.length() }) { "Séries quotidiennes incohérentes" }
+        for (values in listOf(dMax, dMin, dCodes, dUvMax)) for (i in 0 until values.length()) {
+            if (!values.isNull(i)) require(values.getDouble(i).isFinite()) { "Mesure quotidienne invalide" }
+        }
         val dList = mutableListOf<DailyForecast>()
         val today = now.toLocalDate()
         for (i in 0 until dTimes.length()) {
-            val d = LocalDate.parse(dTimes.getString(i))
+            val d = date(dTimes.get(i))
             if (d.isAfter(today) && !d.isAfter(today.plusDays(7))) {
-                dList.add(DailyForecast(d, dMin.getDouble(i), dMax.getDouble(i), dCodes.getInt(i)))
+                if (!dMin.isNull(i) && !dMax.isNull(i) && !dCodes.isNull(i))
+                    dList.add(DailyForecast(d, dMin.getDouble(i), dMax.getDouble(i), dCodes.getInt(i)))
             }
         }
 
         var peakVal = -1.0
         var peakTime: LocalDateTime? = null
         for (i in 0 until hTimes.length()) {
-            val t = LocalDateTime.parse(hTimes.getString(i))
+            val t = time(hTimes.get(i))
             if (t.toLocalDate() == today) {
                 val v = hUv.optDouble(i, -1.0)
                 if (v > peakVal) {
@@ -105,7 +126,7 @@ class OpenMeteoWeatherRepository(private val transport: HttpTransport = HttpTran
                 }
             }
         }
-        val todayIndex = (0 until dTimes.length()).firstOrNull { dTimes.getString(it) == today.toString() }
+        val todayIndex = (0 until dTimes.length()).firstOrNull { date(dTimes.get(it)) == today }
         val uvMaxToday = if (peakVal >= 0) peakVal else todayIndex?.let { dUvMax.optDouble(it, -1.0) } ?: -1.0
 
         // AQI (européen) - avec gestion d'erreur séparée car optionnel
@@ -121,10 +142,10 @@ class OpenMeteoWeatherRepository(private val transport: HttpTransport = HttpTran
 
             var tookNow = false
             for (i in 0 until aTimes.length()) {
-                val t = LocalDateTime.parse(aTimes.getString(i))
+                val t = time(aTimes.get(i))
                 if (aVals.isNull(i)) continue
                 val v = aVals.getInt(i)
-                if (t == now.truncatedTo(java.time.temporal.ChronoUnit.HOURS) && !tookNow) {
+                if (current(aTimes.get(i)) && !tookNow) {
                     aqiNow = v
                     tookNow = true
                 }
@@ -152,7 +173,12 @@ class OpenMeteoWeatherRepository(private val transport: HttpTransport = HttpTran
             peakTime,
             aqiNow,
             aqiMaxToday,
-            aqiPeakTime
+            aqiPeakTime,
+            zoneId = zone.id,
+            observedAt = cur.opt("time")?.let { value ->
+                if (value is Number) java.time.Instant.ofEpochSecond(value.toLong())
+                else runCatching { time(value).atZone(zone).toInstant() }.getOrNull()
+            }
         )
     }
 }

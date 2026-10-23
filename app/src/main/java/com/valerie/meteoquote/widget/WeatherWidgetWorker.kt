@@ -23,61 +23,70 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
     override suspend fun doWork(): Result {
         val manager = AppWidgetManager.getInstance(applicationContext)
         val component = ComponentName(applicationContext, WeatherWidgetProvider::class.java)
-        val ids = (manager.getAppWidgetIds(component).toList() +
-            (inputData.getIntArray(WIDGET_IDS) ?: intArrayOf()).toList()).distinct().toIntArray()
-        if (com.valerie.meteoquote.BuildConfig.DEBUG) android.util.Log.d("WeatherWidget", "Refreshing widget IDs: ${ids.joinToString()}")
+        val ids = manager.getAppWidgetIds(component)
         if (ids.isEmpty()) return Result.success()
-        val cities = cityRepository.loadCities().ifEmpty { cityRepository.defaultCities }
-        val city = cities.getOrNull(cityRepository.selectedIndex(cities.size))
-        val views = WidgetViews.loading(applicationContext, city?.label.orEmpty())
-        fun publish(hasQuote: Boolean) {
-            val currentIds = (ids.toList() + manager.getAppWidgetIds(component).toList()).distinct()
-            currentIds.forEach { id ->
-                WidgetLayout.apply(applicationContext, manager.getAppWidgetOptions(id), views, hasQuote)
+        fun selected(): com.valerie.meteoquote.data.model.City? {
+            val cities = cityRepository.loadCities().ifEmpty { cityRepository.defaultCities }
+            return cities.getOrNull(cityRepository.selectedIndex(cities.size))
+        }
+        val city = selected() ?: return Result.success()
+        val key = com.valerie.meteoquote.data.CachePolicy.key(city.lat, city.lon)
+        if (inputData.getBoolean(NETWORK, false) &&
+            inputData.getString(NETWORK_KEY)?.let { it != key } == true) return Result.success()
+        fun stillSelected() = selected()?.let {
+            com.valerie.meteoquote.data.CachePolicy.key(it.lat, it.lon) == key
+        } == true
+        fun publish(result: com.valerie.meteoquote.data.model.WeatherResult?, failure: String? = null) {
+            if (!stillSelected()) return
+            val quote = quoteRepository.getQuote(result?.current?.second?.takeIf { !result.isOld })
+            val views = WidgetViews.rendered(applicationContext, city.label, result, quote, failure)
+            manager.getAppWidgetIds(component).forEach { id ->
+                WidgetLayout.apply(applicationContext, manager.getAppWidgetOptions(id), views, true)
                 manager.updateAppWidget(id, views)
             }
         }
-        publish(false)
-        // Charger les données en arrière-plan
-        run {
-            try {
-
-                requireNotNull(city) { "No selected city" }
-
-                val result = withContext(Dispatchers.IO) {
-                    weatherRepository.fetchWeather(city.lat, city.lon)
+        var cached: com.valerie.meteoquote.data.model.WeatherResult? = null
+        try {
+            cached = weatherRepository.cachedWeather(city.lat, city.lon)
+            publish(cached)
+            if (!inputData.getBoolean(NETWORK, false)) {
+                if (inputData.getBoolean(FORCE, false) || cached?.fetchedAt?.let {
+                    com.valerie.meteoquote.data.CachePolicy.fresh(it.toEpochMilli(), java.time.Instant.now())
+                } != true) {
+                    val request = androidx.work.OneTimeWorkRequestBuilder<WeatherWidgetWorker>()
+                        .setInputData(androidx.work.workDataOf(NETWORK to true, NETWORK_KEY to key))
+                        .setConstraints(androidx.work.Constraints.Builder()
+                            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
+                        .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, java.util.concurrent.TimeUnit.SECONDS)
+                        .build()
+                    androidx.work.WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+                        "weather-widget-network-$key", androidx.work.ExistingWorkPolicy.KEEP, request)
                 }
-                val (temp, code) = result.current
-                val condition = WeatherUtils.wmoToLabel(code)
-                val quote = quoteRepository.getQuote(code)
-
-                // Mettre à jour les vues (peut être fait depuis n'importe quel thread)
-                views.setTextViewText(R.id.widget_city, city.label)
-                views.setTextViewText(R.id.widget_temp, "${temp.toInt()}°")
-                views.setContentDescription(R.id.widget_temp, "${temp.toInt()} degrés Celsius")
-                views.setTextViewText(R.id.widget_condition, condition)
-                views.setContentDescription(R.id.widget_content, "${city.label}, ${temp.toInt()} degrés Celsius, $condition")
-                views.setImageViewResource(R.id.widget_icon, WeatherUtils.wmoToIconRes(code))
-                
-                views.setTextViewText(R.id.widget_quote, quote)
-                WidgetViews.remember(applicationContext, city.label, "${temp.toInt()}°", condition, code, quote)
-
-                // Mettre à jour le widget
-                publish(true)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // En cas d'erreur, afficher un message
-                views.setTextViewText(R.id.widget_temp, "—°")
-                views.setTextViewText(R.id.widget_condition, "Météo indisponible")
-                views.setViewVisibility(R.id.widget_quote, android.view.View.GONE)
-                views.setContentDescription(R.id.widget_content, "Météo indisponible")
-                WidgetViews.remember(applicationContext, city?.label.orEmpty(), "—°", "Météo indisponible", 3, null)
-                publish(false)
+                return Result.success()
             }
+            val result = weatherRepository.fetchWeather(city.lat, city.lon)
+            publish(result)
+            return Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            publish(cached, if (e is com.valerie.meteoquote.data.WeatherStorageException)
+                "Stockage indisponible" else "Actualisation impossible")
+            val retryable = when (e) {
+                is com.valerie.meteoquote.data.HttpStatusException -> e.statusCode in setOf(408, 429, 500, 502, 503, 504)
+                is com.valerie.meteoquote.data.InvalidResponseException -> false
+                is java.io.IOException -> true
+                else -> false
+            }
+            return if (inputData.getBoolean(NETWORK, false) && retryable && runAttemptCount < 2) Result.retry()
+                else Result.failure()
         }
-        return Result.success()
     }
 
-    companion object { const val WIDGET_IDS = "widget_ids" }
+    companion object {
+        const val WIDGET_IDS = "widget_ids"
+        const val NETWORK = "network"
+        const val NETWORK_KEY = "network_key"
+        const val FORCE = "force"
+    }
 }

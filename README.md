@@ -11,13 +11,15 @@ Recherche de villes (Open-Meteo Geocoding), persistance, **thème dynamique** (c
 - Météo **actuelle**, **24 h** (heure par heure), **7 jours** (min/max)
 - Recherche de villes + **persistance** (SharedPreferences)
 - **Icônes couleur** + **thème** qui s’adapte à la météo (WMO → UI)
-- **Citations** contextualisées + bouton “Nouvelle citation”
+- **Citation quotidienne** persistée, commune à l’application et au widget
+- **Consultation hors ligne** après un premier chargement, cache Room par lieu et données datées
 - **Feedback** (Google Forms) avec infos techniques pré-remplies
 
 ## Stack
 - **Kotlin**, Coroutines, Java 17 (desugaring `java.time`)
 - **Android Views/XML**, WindowInsets (edge-to-edge Android 15)
 - Réseau **Open-Meteo** (`OkHttp`), `org.json`
+- Stockage météo **Room**, AQI indépendant et reprise réseau du widget
 - **Gradle Kotlin DSL**, R8/ProGuard + shrink resources
 
 ## Build
@@ -35,3 +37,5 @@ Recherche de villes (Open-Meteo Geocoding), persistance, **thème dynamique** (c
 
 Audit : [docs/ANDROID_MODERNIZATION.md](docs/ANDROID_MODERNIZATION.md).
 Procédure de publication et limites : [docs/RELEASE.md](docs/RELEASE.md).
+
+Cache hors ligne et validation du lot C : [docs/LOT_C_LIVRAISON.md](docs/LOT_C_LIVRAISON.md).

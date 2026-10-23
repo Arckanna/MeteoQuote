@@ -12,6 +12,10 @@ activity = "1.10.1"
 constraintlayout = "2.2.1"
 
 [libraries]
+room-runtime = { module = "androidx.room:room-runtime", version = "2.8.5" }
+room-ktx = { module = "androidx.room:room-ktx", version = "2.8.5" }
+room-compiler = { module = "androidx.room:room-compiler", version = "2.8.5" }
+room-testing = { module = "androidx.room:room-testing", version = "2.8.5" }
 compose-bom = { module = "androidx.compose:compose-bom", version = "2024.12.01" }
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-material3 = { module = "androidx.compose.material3:material3" }

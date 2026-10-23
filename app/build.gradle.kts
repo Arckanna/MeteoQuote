@@ -6,7 +6,10 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
-kapt { correctErrorTypes = true }
+kapt {
+    correctErrorTypes = true
+    arguments { arg("room.schemaLocation", "$projectDir/schemas") }
+}
 
 android {
     namespace = "com.valerie.meteoquote"
@@ -54,6 +57,10 @@ android {
 }
 
 dependencies {
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    kapt(libs.room.compiler)
+    androidTestImplementation(libs.room.testing)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)

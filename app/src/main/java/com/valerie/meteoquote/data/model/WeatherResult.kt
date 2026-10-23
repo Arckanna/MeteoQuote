@@ -26,5 +26,12 @@ data class WeatherResult(
     val aqiNow: Int,
     val aqiMaxToday: Int,
     val aqiPeakTime: LocalDateTime?,
-    val isAirQualityLoading: Boolean = false
+    val isAirQualityLoading: Boolean = false,
+    val fetchedAt: java.time.Instant? = null,
+    val airFetchedAt: java.time.Instant? = null,
+    val zoneId: String = "UTC",
+    val observedAt: java.time.Instant? = null,
+    val isRefreshing: Boolean = false,
+    val refreshError: String? = null,
+    val isOld: Boolean = false
 )

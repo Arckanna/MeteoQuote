@@ -1,6 +1,6 @@
 # Lot C — Préparation du cache Room et de la consultation hors ligne
 
-Date : 22 octobre 2026. Statut : spécification prête pour une implémentation progressive ; aucun cache Room implémenté par ce document.
+Date : 22 octobre 2026. Statut : spécification de référence ; voir [implémentation et validation du lot C](LOT_C_LIVRAISON.md) pour le périmètre livré et les adaptations de conception.
 
 Référence locale : commit `2668e11`, branche `codex/fiabilite-aqi-localisation`. Cette préparation ne présume pas que la fusion dans master a été effectuée. Au démarrage du développement, vérifier la base de branche et conserver les correctifs B02/B03.
 
