@@ -486,4 +486,19 @@ class WeatherViewModelTest {
         assertEquals("Choix manuel", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
         assertFalse(vm.uiState.value.cities.any { it.label == "Position tardive" })
     }
+    @Test fun providerTimeIsPreservedSeparatelyFromDownloadTime() = runTest(testDispatcher) {
+        val downloaded = java.time.Instant.parse("2026-10-31T09:30:00Z")
+        val observed = downloaded.minusSeconds(7200)
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns
+            createMockWeatherResult().copy(observedAt = observed, fetchedAt = downloaded, zoneId = "Europe/Paris")
+        val vm = createViewModel()
+        advanceUntilIdle()
+        assertEquals(observed, vm.uiState.value.observedAt)
+        assertEquals(downloaded, vm.uiState.value.updatedAt)
+        assertEquals("Europe/Paris", vm.uiState.value.zoneId)
+        assertEquals("Dernières conditions connues", com.valerie.meteoquote.data.WeatherFreshness.title(
+            vm.uiState.value.observedAt, vm.uiState.value.updatedAt, downloaded))
+    }
+
 }
+
