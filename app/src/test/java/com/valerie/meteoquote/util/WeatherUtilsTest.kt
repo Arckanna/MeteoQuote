@@ -13,9 +13,9 @@ class WeatherUtilsTest {
 
     @Test
     fun `wmoToLabel should return correct label for cloudy`() {
-        assertEquals("Plutôt nuageux", WeatherUtils.wmoToLabel(1))
-        assertEquals("Plutôt nuageux", WeatherUtils.wmoToLabel(2))
-        assertEquals("Plutôt nuageux", WeatherUtils.wmoToLabel(3))
+        assertEquals("Principalement dégagé", WeatherUtils.wmoToLabel(1))
+        assertEquals("Partiellement nuageux", WeatherUtils.wmoToLabel(2))
+        assertEquals("Couvert", WeatherUtils.wmoToLabel(3))
     }
 
     @Test
@@ -43,7 +43,8 @@ class WeatherUtilsTest {
 
     @Test
     fun `wmoToIconRes should return correct icon for cloudy`() {
-        assertEquals(R.drawable.ic_weather_cloudy_color, WeatherUtils.wmoToIconRes(1))
+        assertEquals(R.drawable.ic_weather_sunny_color, WeatherUtils.wmoToIconRes(1))
+        assertEquals(R.drawable.ic_weather_partly_cloudy_color, WeatherUtils.wmoToIconRes(2))
         assertEquals(R.drawable.ic_weather_cloudy_color, WeatherUtils.wmoToIconRes(3))
     }
 
