@@ -43,7 +43,7 @@ class OfflineWeatherRepositoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         database = Room.inMemoryDatabaseBuilder(context, WeatherDatabase::class.java).build()
         transport = mockk()
-        coEvery { transport.get(match { it.contains("api.open-meteo.com") }) } returns body
+        coEvery { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) } returns body
         coEvery { transport.get(match { it.contains("air-quality-api") }) } returns air
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         repo = OfflineWeatherRepository(OpenMeteoWeatherRepository(transport, clock), database.weather(), clock, scope,
@@ -144,7 +144,7 @@ class OfflineWeatherRepositoryTest {
     @Test fun simultaneousConsumersShareWeatherAndCancellingOneKeepsTheOther() = runBlocking {
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
-        coEvery { transport.get(match { it.contains("api.open-meteo.com") }) } coAnswers {
+        coEvery { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) } coAnswers {
             started.complete(Unit)
             release.await()
             body
@@ -157,7 +157,7 @@ class OfflineWeatherRepositoryTest {
         screen.cancelAndJoin()
         release.complete(Unit)
         assertEquals(18.5, widget.await().current.first, 0.001)
-        coVerify(exactly = 1) { transport.get(match { it.contains("api.open-meteo.com") }) }
+        coVerify(exactly = 1) { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) }
     }
 
     @Test fun databaseSurvivesClosingAndReopeningWithoutChangingPreferences() = runBlocking {
@@ -189,7 +189,7 @@ class OfflineWeatherRepositoryTest {
         assertEquals(now, result.fetchedAt)
         coVerify(exactly = 0) { transport.get(any()) }
         repo.fetchWeatherIfNeeded(48.0, 2.0, force = true)
-        coVerify(exactly = 1) { transport.get(match { it.contains("api.open-meteo.com") }) }
+        coVerify(exactly = 1) { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) }
     }
 
     @Test fun automaticWidgetDownloadsWhenCacheReachesExpiryBoundary() = runBlocking {
@@ -197,13 +197,13 @@ class OfflineWeatherRepositoryTest {
         clearMocks(transport, answers = false)
         clock.current = now.plusMillis(CachePolicy.FRESH_MILLIS)
         assertEquals(clock.instant(), repo.fetchWeatherIfNeeded(48.0, 2.0, force = false).fetchedAt)
-        coVerify(exactly = 1) { transport.get(match { it.contains("api.open-meteo.com") }) }
+        coVerify(exactly = 1) { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) }
     }
 
     @Test fun failedAutomaticRefreshBacksOffButManualRefreshIsImmediate() = runBlocking {
         finished()
         clearMocks(transport, answers = false)
-        coEvery { transport.get(match { it.contains("api.open-meteo.com") }) } throws java.io.IOException("offline")
+        coEvery { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) } throws java.io.IOException("offline")
         clock.current = now.plusSeconds(1800)
         assertNotNull(finished(force = false).refreshError) // first failure: wait one minute
         clock.current = clock.current.plusSeconds(60)
@@ -212,17 +212,17 @@ class OfflineWeatherRepositoryTest {
         val cached = finished(force = false) // still in cooldown, no third network request
         assertNotNull(cached.refreshError)
         assertEquals(now, cached.fetchedAt)
-        coVerify(exactly = 2) { transport.get(match { it.contains("api.open-meteo.com") }) }
+        coVerify(exactly = 2) { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) }
         assertNotNull(finished(force = true).refreshError) // manual attempt bypasses cooldown
-        coVerify(exactly = 3) { transport.get(match { it.contains("api.open-meteo.com") }) }
-        coEvery { transport.get(match { it.contains("api.open-meteo.com") }) } returns body
+        coVerify(exactly = 3) { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) }
+        coEvery { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) } returns body
         assertNull(finished(force = true).refreshError)
         clock.current = clock.current.plusSeconds(1800)
-        coEvery { transport.get(match { it.contains("api.open-meteo.com") }) } throws java.io.IOException("offline again")
+        coEvery { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) } throws java.io.IOException("offline again")
         finished(force = false)
         clock.current = clock.current.plusSeconds(60)
         finished(force = false) // success reset the failure count: one minute is sufficient
-        coVerify(exactly = 6) { transport.get(match { it.contains("api.open-meteo.com") }) }
+        coVerify(exactly = 6) { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) }
     }
 
     @Test fun airFailureHasItsOwnCooldownWithoutBlockingWeatherOrManualRefresh() = runBlocking {
@@ -235,10 +235,10 @@ class OfflineWeatherRepositoryTest {
         finished(force = false)
         clock.current = clock.current.plusSeconds(60)
         finished(force = false)
-        coVerify(exactly = 1) { transport.get(match { it.contains("api.open-meteo.com") }) }
+        coVerify(exactly = 1) { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) }
         coVerify(exactly = 2) { transport.get(match { it.contains("air-quality-api") }) }
         finished(force = true)
-        coVerify(exactly = 2) { transport.get(match { it.contains("api.open-meteo.com") }) }
+        coVerify(exactly = 2) { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) }
         coVerify(exactly = 3) { transport.get(match { it.contains("air-quality-api") }) }
     }
 
