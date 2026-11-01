@@ -19,6 +19,7 @@ class OfflineWeatherRepository(
     private data class Request(val work: Deferred<Unit>, var users: Int = 0)
     private val requests = mutableMapOf<String, Request>()
     private val lock = Any()
+    private val backoff = AutomaticRefreshBackoff()
     private data class Progress(val weather: Boolean = false, val air: Boolean = false, val failure: Exception? = null)
 
     private suspend fun <T> storage(block: suspend () -> T): T = try { block() }
@@ -50,9 +51,18 @@ class OfflineWeatherRepository(
         shared("weather:$key") {
             val old = storage { dao.weather(key) }
             if (!force && old != null && CachePolicy.fresh(old.fetchedAt, clock.instant())) return@shared
-            val body = remote.weatherBody(lat, lon)
-            // Parse before replacement: a bad response must never destroy the previous record.
-            val parsed = remote.parseWeather(body)
+            val operation = "weather:$key"
+            if (!force) backoff.deferredFailure(operation, clock.instant())?.let { throw it }
+            val (body, parsed) = try {
+                val body = remote.weatherBody(lat, lon)
+                // Validate before replacement; malformed responses must preserve the previous record.
+                body to remote.parseWeather(body)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                backoff.failed(operation, e, clock.instant())
+                throw e
+            }
+            backoff.succeeded(operation)
             storage { dao.putWeather(WeatherRecord(key, lat, lon, parsed.zoneId, clock.millis(), body)) }
         }
     }
@@ -62,17 +72,27 @@ class OfflineWeatherRepository(
         shared("air:$key") {
             val old = storage { dao.air(key) }
             if (!force && old != null && CachePolicy.fresh(old.fetchedAt, clock.instant())) return@shared
-            val body = withTimeoutOrNull(5_000) { remote.airBody(lat, lon) }
-                ?: throw java.net.SocketTimeoutException("AQI timeout")
-            val hourly = JSONObject(body).getJSONObject("hourly")
-            val times = hourly.getJSONArray("time")
-            val values = hourly.getJSONArray("european_aqi")
-            require(times.length() == values.length())
-            for (i in 0 until times.length()) {
-                val value = times.get(i)
-                if (value !is Number) java.time.LocalDateTime.parse(value.toString())
-                if (!values.isNull(i)) require(values.getDouble(i).let { it.isFinite() && it >= 0 })
+            val operation = "air:$key"
+            if (!force) backoff.deferredFailure(operation, clock.instant())?.let { throw it }
+            val body = try {
+                val body = withTimeoutOrNull(5_000) { remote.airBody(lat, lon) }
+                    ?: throw java.net.SocketTimeoutException("AQI timeout")
+                val hourly = JSONObject(body).getJSONObject("hourly")
+                val times = hourly.getJSONArray("time")
+                val values = hourly.getJSONArray("european_aqi")
+                require(times.length() == values.length())
+                for (i in 0 until times.length()) {
+                    val value = times.get(i)
+                    if (value !is Number) java.time.LocalDateTime.parse(value.toString())
+                    if (!values.isNull(i)) require(values.getDouble(i).let { it.isFinite() && it >= 0 })
+                }
+                body
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                backoff.failed(operation, e, clock.instant())
+                throw e
             }
+            backoff.succeeded(operation)
             storage { dao.putAir(AirRecord(key, clock.millis(), body)) }
         }
     }
@@ -93,9 +113,13 @@ class OfflineWeatherRepository(
     }
 
     /** A bounded network operation for workers; they render cachedWeather before calling it. */
-    override suspend fun fetchWeather(lat: Double, lon: Double): WeatherResult {
+    override suspend fun fetchWeather(lat: Double, lon: Double): WeatherResult =
+        fetchWeatherIfNeeded(lat, lon, force = true)
+
+    override suspend fun fetchWeatherIfNeeded(lat: Double, lon: Double, force: Boolean): WeatherResult {
         prune(CachePolicy.key(lat, lon))
-        refresh(lat, lon, true)
+        // The freshness check is inside the shared operation, immediately before the network call.
+        refresh(lat, lon, force)
         return cachedWeather(lat, lon) ?: throw IllegalStateException("No stored weather")
     }
 
@@ -138,3 +162,4 @@ class OfflineWeatherRepository(
         }
     }.flowOn(Dispatchers.IO)
 }
+

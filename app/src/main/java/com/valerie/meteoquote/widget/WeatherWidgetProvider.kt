@@ -49,7 +49,8 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             val ids = manager.getAppWidgetIds(android.content.ComponentName(context, javaClass))
             context.getSharedPreferences("widget_schedule", Context.MODE_PRIVATE).edit()
                 .apply { ids.forEach { putLong("attempt_$it", System.currentTimeMillis()) } }.apply()
-            enqueue(context, ids, force = intent.action == WidgetViews.ACTION_REFRESH)
+            if (intent.action == WidgetViews.ACTION_RENDER) renderCached(context, manager, ids)
+            else enqueue(context, ids, force = true)
         }
     }
 
@@ -97,7 +98,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         scheduling.execute {
             try {
                 WorkManager.getInstance(context).enqueueUniqueWork("weather-widget",
-                    ExistingWorkPolicy.KEEP, request.build()).result.get(8, TimeUnit.SECONDS)
+                    (if (force) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP), request.build()).result.get(8, TimeUnit.SECONDS)
             } catch (failure: Exception) {
                 android.util.Log.w("WeatherWidget", "Widget scheduling failed", failure)
                 val manager = AppWidgetManager.getInstance(context)
@@ -115,3 +116,4 @@ class WeatherWidgetProvider : AppWidgetProvider() {
 
     private companion object { val scheduling = Executors.newSingleThreadExecutor() }
 }
+
