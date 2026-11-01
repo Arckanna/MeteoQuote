@@ -54,17 +54,20 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
                     com.valerie.meteoquote.data.CachePolicy.fresh(it.toEpochMilli(), java.time.Instant.now())
                 } != true) {
                     val request = androidx.work.OneTimeWorkRequestBuilder<WeatherWidgetWorker>()
-                        .setInputData(androidx.work.workDataOf(NETWORK to true, NETWORK_KEY to key))
+                        .setInputData(androidx.work.workDataOf(NETWORK to true, NETWORK_KEY to key,
+                            FORCE to inputData.getBoolean(FORCE, false)))
                         .setConstraints(androidx.work.Constraints.Builder()
                             .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                         .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, java.util.concurrent.TimeUnit.SECONDS)
                         .build()
                     androidx.work.WorkManager.getInstance(applicationContext).enqueueUniqueWork(
-                        "weather-widget-network-$key", androidx.work.ExistingWorkPolicy.KEEP, request)
+                        "weather-widget-network-$key",
+                        if (inputData.getBoolean(FORCE, false)) androidx.work.ExistingWorkPolicy.REPLACE
+                        else androidx.work.ExistingWorkPolicy.KEEP, request)
                 }
                 return Result.success()
             }
-            val result = weatherRepository.fetchWeather(city.lat, city.lon)
+            val result = weatherRepository.fetchWeatherIfNeeded(city.lat, city.lon, inputData.getBoolean(FORCE, false))
             publish(result)
             return Result.success()
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -90,3 +93,4 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
         const val FORCE = "force"
     }
 }
+
