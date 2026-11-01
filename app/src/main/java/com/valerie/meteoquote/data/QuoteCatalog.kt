@@ -9,8 +9,8 @@ internal object QuoteCatalog {
     }
 
     fun category(code: Int?): String = when (code) {
-        0 -> "clear"
-        1, 2, 3 -> "clouds"
+        0, 1 -> "clear"
+        2, 3 -> "clouds"
         45, 48 -> "fog"
         51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> "rain"
         71, 73, 75, 77, 85, 86 -> "snow"
@@ -53,8 +53,8 @@ internal object QuoteCatalog {
             Entry("thunder-3", Quote("La tempête forge les marins.", "Proverbe"))
         )
         return when (code) {
-            0 -> clear
-            1, 2, 3 -> clouds
+            0, 1 -> clear
+            2, 3 -> clouds
             45, 48 -> fog
             51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> rain
             71, 73, 75, 77, 85, 86 -> snow

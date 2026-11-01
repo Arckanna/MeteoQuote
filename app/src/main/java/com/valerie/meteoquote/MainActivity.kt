@@ -272,8 +272,13 @@ class MainActivity : AppCompatActivity() {
             visibility = if ((state.error != null || state.notice != null) && !state.isLoading) View.VISIBLE else View.GONE
             isEnabled = !state.isLoading && !state.isRefreshing
         }
+        val now = java.time.Instant.now()
+        findViewById<TextView>(R.id.tvCurrentWeatherTitle).text =
+            if (state.currentTemp == null) getString(R.string.current_weather)
+            else com.valerie.meteoquote.data.WeatherFreshness.title(state.observedAt, state.updatedAt, now)
         findViewById<TextView>(R.id.tvUpdated).text = listOfNotNull(
-            state.updatedAt?.let { com.valerie.meteoquote.data.CachePolicy.label(it, java.time.Instant.now()) },
+            if (state.currentTemp != null) com.valerie.meteoquote.data.WeatherFreshness.label(
+                state.observedAt, state.updatedAt, state.zoneId, now) else null,
             "Mise à jour…".takeIf { state.isRefreshing && state.currentTemp != null },
             state.notice).joinToString(" · ")
         // Gestion du chargement
@@ -571,3 +576,4 @@ class MainActivity : AppCompatActivity() {
         addToRecents(city)
     }
 }
+

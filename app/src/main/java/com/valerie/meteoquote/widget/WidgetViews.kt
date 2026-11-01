@@ -17,12 +17,17 @@ internal object WidgetViews {
         val condition = result?.let { com.valerie.meteoquote.util.WeatherUtils.wmoToLabel(it.current.second) }
             ?: "Aucune météo enregistrée"
         val now = java.time.Instant.now()
-        val age = result?.fetchedAt?.let { com.valerie.meteoquote.data.CachePolicy.label(it, now) }
-        val status = listOfNotNull(age, condition, failure).joinToString(" · ")
-        if (result?.fetchedAt?.let { !com.valerie.meteoquote.data.CachePolicy.fresh(it.toEpochMilli(), now) } == true)
+        val age = result?.let { com.valerie.meteoquote.data.WeatherFreshness.label(
+            it.observedAt, it.fetchedAt, it.zoneId, now) }
+        val heading = result?.let { com.valerie.meteoquote.data.WeatherFreshness.title(
+            it.observedAt, it.fetchedAt, now) }
+        val status = listOfNotNull(heading, condition, age, failure).joinToString(" · ")
+        if (result != null && !com.valerie.meteoquote.data.WeatherFreshness.isCurrent(
+                result.observedAt, result.fetchedAt, now))
             setTextViewText(R.id.widget_city, "Ancien · $city")
         setTextViewText(R.id.widget_temp, temp)
-        setTextViewText(R.id.widget_condition, status)
+        // Keep the condition readable in the compact one-line widget; full dates remain accessible.
+        setTextViewText(R.id.widget_condition, listOfNotNull(condition, age, failure).joinToString(" · "))
         setTextViewText(R.id.widget_quote, quote)
         setImageViewResource(R.id.widget_icon, com.valerie.meteoquote.util.WeatherUtils.wmoToIconRes(result?.current?.second ?: 3))
         setContentDescription(R.id.widget_temp, "$temp Celsius")
@@ -46,3 +51,4 @@ internal object WidgetViews {
             setContentDescription(R.id.widget_content, "$city, chargement météo")
         }
 }
+

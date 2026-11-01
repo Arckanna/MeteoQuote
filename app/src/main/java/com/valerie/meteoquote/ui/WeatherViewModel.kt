@@ -15,6 +15,8 @@ import kotlinx.coroutines.launch
 
 data class WeatherUiState(
     val updatedAt: java.time.Instant? = null,
+    val observedAt: java.time.Instant? = null,
+    val zoneId: String = "UTC",
     val isLoading: Boolean = false,
     val isAirQualityLoading: Boolean = false,
     val isRefreshing: Boolean = false,
@@ -145,6 +147,8 @@ class WeatherViewModel @javax.inject.Inject constructor(
                         error = null,
                         errorKind = null,
                         updatedAt = result.fetchedAt ?: fetchedAt,
+                        observedAt = result.observedAt,
+                        zoneId = result.zoneId,
                         currentTemp = temp,
                         weatherCode = code,
                         condition = condition,
@@ -283,3 +287,4 @@ class WeatherViewModel @javax.inject.Inject constructor(
     }
 
 }
+

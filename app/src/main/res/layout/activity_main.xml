@@ -97,6 +97,7 @@
         android:layout_marginTop="@dimen/space_medium"
         android:background="@drawable/bg_surface">
         <TextView
+          android:id="@+id/tvCurrentWeatherTitle"
           style="@style/TextSectionTitle"
           android:text="@string/current_weather"
           android:accessibilityHeading="true"
@@ -233,3 +234,4 @@
     </LinearLayout>
   </androidx.constraintlayout.widget.ConstraintLayout>
 </ScrollView>
+

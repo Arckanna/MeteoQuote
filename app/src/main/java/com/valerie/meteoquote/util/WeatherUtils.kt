@@ -8,7 +8,9 @@ object WeatherUtils {
     
     fun wmoToLabel(code: Int): String = when (code) {
         0 -> "Ciel clair"
-        1, 2, 3 -> "Plutôt nuageux"
+        1 -> "Principalement dégagé"
+        2 -> "Partiellement nuageux"
+        3 -> "Couvert"
         45, 48 -> "Brouillard"
         51, 53, 55 -> "Bruine"
         56, 57 -> "Bruine verglaçante"
@@ -20,8 +22,9 @@ object WeatherUtils {
     }
     
     fun wmoToIconRes(code: Int): Int = when (code) {
-        0 -> R.drawable.ic_weather_sunny_color
-        1, 2, 3 -> R.drawable.ic_weather_cloudy_color
+        0, 1 -> R.drawable.ic_weather_sunny_color
+        2 -> R.drawable.ic_weather_partly_cloudy_color
+        3 -> R.drawable.ic_weather_cloudy_color
         45, 48 -> R.drawable.ic_weather_fog_color
         51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> R.drawable.ic_weather_rain_color
         71, 73, 75, 77, 85, 86 -> R.drawable.ic_weather_snow_color
@@ -30,8 +33,8 @@ object WeatherUtils {
     }
     
     fun themeDrawableRes(code: Int): Int = when (code) {
-        0 -> R.drawable.bg_weather_clear
-        1, 2, 3 -> R.drawable.bg_weather_clouds
+        0, 1 -> R.drawable.bg_weather_clear
+        2, 3 -> R.drawable.bg_weather_clouds
         45, 48 -> R.drawable.bg_weather_fog
         51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> R.drawable.bg_weather_rain
         71, 73, 75, 77, 85, 86 -> R.drawable.bg_weather_snow
@@ -40,8 +43,8 @@ object WeatherUtils {
     }
     
     fun statusColorRes(code: Int): Int = when (code) {
-        0 -> R.color.status_clear
-        1, 2, 3 -> R.color.status_clouds
+        0, 1 -> R.color.status_clear
+        2, 3 -> R.color.status_clouds
         45, 48 -> R.color.status_fog
         51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82, 66, 67 -> R.color.status_rain
         71, 73, 75, 77, 85, 86 -> R.color.status_snow
