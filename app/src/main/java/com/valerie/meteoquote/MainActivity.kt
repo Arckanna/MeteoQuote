@@ -34,9 +34,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import com.valerie.meteoquote.util.WeatherUtils
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
-import java.time.format.DateTimeFormatter
+import androidx.core.widget.doAfterTextChanged
 import java.util.Locale
 import android.content.Context
 import org.json.JSONArray
@@ -197,44 +195,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         val etCitySearch: EditText = findViewById(R.id.etCitySearch)
-        findViewById<Button>(R.id.btnAddCity).setOnClickListener {
-            val q = etCitySearch.text.toString().trim()
-            if (q.isEmpty()) {
-                Toast.makeText(this, "Saisis un nom de ville", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            // Désactiver le bouton pendant la recherche
-            viewModel.cancelLocationRequest()
-            findViewById<Button>(R.id.btnAddCity).isEnabled = false
-            lifecycleScope.launch {
-                try {
-                    val found = withContext(Dispatchers.IO) {
-                        cityRepository.geocodeCity(q)
-                    }
-                    withContext(Dispatchers.Main) {
-                        if (found == null) {
-                            Toast.makeText(this@MainActivity, "Ville introuvable", Toast.LENGTH_SHORT).show()
-                        } else {
-                            viewModel.addCity(found)
-                            addToRecents(found)
-                            etCitySearch.text.clear()
-                            Toast.makeText(this@MainActivity, "Ville ajoutée : ${found.label}", Toast.LENGTH_SHORT).show()
-                        }
-                        findViewById<Button>(R.id.btnAddCity).isEnabled = true
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, "Erreur : ${e.message ?: "Impossible d'ajouter la ville"}", Toast.LENGTH_SHORT).show()
-                        findViewById<Button>(R.id.btnAddCity).isEnabled = true
-                    }
-
-                }
-            }
-        }
+        // The ViewModel owns the draft across Activity recreation.
+        etCitySearch.isSaveEnabled = false
+        etCitySearch.setText(viewModel.searchState.value.query)
+        etCitySearch.doAfterTextChanged { viewModel.updateSearchQuery(it.toString()) }
+        findViewById<Button>(R.id.btnAddCity).setOnClickListener { viewModel.searchCity() }
     }
-
     private fun observeViewModel() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -243,6 +209,18 @@ class MainActivity : AppCompatActivity() {
                         viewModel.refreshDailyQuote()
                         viewModel.refreshVisibleWeather()
                         kotlinx.coroutines.delay(60_000)
+                    }
+                }
+                launch {
+                    viewModel.searchState.collect { state ->
+                        val input = findViewById<EditText>(R.id.etCitySearch)
+                        if (input.text.toString() != state.query) input.setText(state.query)
+                        findViewById<Button>(R.id.btnAddCity).isEnabled = !state.isSearching
+                        state.addedCity?.let { addToRecents(it) }
+                        state.message?.let {
+                            Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
+                            viewModel.consumeSearchMessage()
+                        }
                     }
                 }
                 viewModel.uiState.collect { updateUI(it) }
