@@ -69,6 +69,137 @@ class WeatherViewModelTest {
     @org.junit.After
     fun tearDown() { Dispatchers.resetMain() }
 
+    @Test fun lateSearchCannotReplaceSelectedExistingCity() = runTest(testDispatcher) {
+        val cities = listOf(City("Toulouse", 43.0, 1.0), City("Lyon", 45.0, 4.0))
+        every { mockCityRepository.loadCities() } returns cities
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val response = kotlinx.coroutines.CompletableDeferred<City>()
+        coEvery { mockCityRepository.geocodeCity("Paris") } coAnswers {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { response.await() }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        vm.selectCity(1)
+        response.complete(City("Paris", 48.0, 2.0))
+        advanceUntilIdle()
+        assertEquals(cities, vm.uiState.value.cities)
+        assertEquals(1, vm.uiState.value.selectedCityIndex)
+        assertEquals("Paris", vm.searchState.value.query)
+        assertFalse(vm.searchState.value.isSearching)
+        assertEquals(null, vm.searchState.value.message)
+    }
+
+    @Test fun locationRequestInvalidatesLateSearch() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        coEvery { mockCityRepository.reverseGeocode(45.0, 4.0) } returns City("Position", 45.0, 4.0)
+        val response = kotlinx.coroutines.CompletableDeferred<City>()
+        coEvery { mockCityRepository.geocodeCity("Paris") } coAnswers {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { response.await() }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        vm.detectLocation(45.0, 4.0, vm.beginLocationRequest())
+        response.complete(City("Paris", 48.0, 2.0))
+        advanceUntilIdle()
+        assertEquals("Position", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        assertEquals("Paris", vm.searchState.value.query)
+        assertEquals(null, vm.searchState.value.addedCity)
+    }
+
+    @Test fun failedSearchKeepsDraftAndAllowsRetry() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        coEvery { mockCityRepository.geocodeCity("Paris") } throws java.io.IOException()
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        advanceUntilIdle()
+        assertEquals("Paris", vm.searchState.value.query)
+        assertFalse(vm.searchState.value.isSearching)
+        assertTrue(vm.searchState.value.message != null)
+        coEvery { mockCityRepository.geocodeCity("Paris") } returns null
+        vm.searchCity()
+        advanceUntilIdle()
+        assertEquals("Ville introuvable", vm.searchState.value.message)
+        assertEquals("Paris", vm.searchState.value.query)
+        assertFalse(vm.searchState.value.isSearching)
+    }
+
+    @Test fun lateSearchCannotReplaceManualSelectionOrClearNewDraft() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val response = kotlinx.coroutines.CompletableDeferred<City>()
+        coEvery { mockCityRepository.geocodeCity("Paris") } coAnswers {
+            // Deliberately ignore cancellation to exercise the intent guard itself.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { response.await() }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        vm.addCity(City("Lyon", 45.0, 4.0))
+        vm.updateSearchQuery("Bordeaux")
+        response.complete(City("Paris", 48.0, 2.0))
+        advanceUntilIdle()
+        assertEquals("Lyon", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        assertFalse(vm.uiState.value.cities.any { it.label == "Paris" })
+        assertEquals("Bordeaux", vm.searchState.value.query)
+        assertFalse(vm.searchState.value.isSearching)
+        assertEquals(null, vm.searchState.value.addedCity)
+        assertEquals(null, vm.searchState.value.message)
+    }
+
+    @Test fun editingDraftInvalidatesSearchEvenWhenOriginalTextIsRetyped() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val response = kotlinx.coroutines.CompletableDeferred<City>()
+        coEvery { mockCityRepository.geocodeCity("Paris") } coAnswers {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { response.await() }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        vm.updateSearchQuery("Lyon")
+        vm.updateSearchQuery("Paris")
+        response.complete(City("Paris", 48.0, 2.0))
+        advanceUntilIdle()
+        assertEquals("Toulouse", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        assertEquals("Paris", vm.searchState.value.query)
+        assertEquals(null, vm.searchState.value.addedCity)
+    }
+
+    @Test fun successfulSearchSelectsCityAndClearsSubmittedDraft() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val paris = City("Paris", 48.0, 2.0)
+        coEvery { mockCityRepository.geocodeCity("Paris") } returns paris
+        val vm = createViewModel()
+        vm.updateSearchQuery(" Paris ")
+        vm.searchCity()
+        advanceUntilIdle()
+        assertEquals(paris, vm.uiState.value.cities[vm.uiState.value.selectedCityIndex])
+        assertEquals("", vm.searchState.value.query)
+        assertEquals(paris, vm.searchState.value.addedCity)
+        assertFalse(vm.searchState.value.isSearching)
+        vm.consumeSearchMessage()
+        assertEquals(null, vm.searchState.value.message)
+        assertEquals(null, vm.searchState.value.addedCity)
+    }
+
+    @Test fun searchInvalidatesPendingLocationAcquisition() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        coEvery { mockCityRepository.geocodeCity("Paris") } returns City("Paris", 48.0, 2.0)
+        val vm = createViewModel()
+        val request = vm.beginLocationRequest()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        vm.detectLocation(45.0, 4.0, request)
+        advanceUntilIdle()
+        coVerify(exactly = 0) { mockCityRepository.reverseGeocode(any(), any()) }
+        assertEquals("Paris", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+    }
+
     private fun createViewModel(): WeatherViewModel {
         return WeatherViewModel(
             application,
