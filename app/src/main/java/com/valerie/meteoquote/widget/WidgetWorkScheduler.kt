@@ -6,7 +6,8 @@ import androidx.work.Operation
 import androidx.work.WorkManager
 
 /** Rendering must drain every intent, including a forced refresh received during a render.
- * Network work has a separate queue per place and may safely share an outstanding download.
+ * Automatic downloads share outstanding work per place; a manual request replaces it
+ * so it cannot inherit an automatic cache/backoff decision or retry delay.
  */
 internal object WidgetWorkScheduler {
     const val RENDER_WORK = "weather-widget"
@@ -14,6 +15,8 @@ internal object WidgetWorkScheduler {
     fun render(manager: WorkManager, request: OneTimeWorkRequest): Operation =
         manager.enqueueUniqueWork(RENDER_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
 
-    fun network(manager: WorkManager, key: String, request: OneTimeWorkRequest): Operation =
-        manager.enqueueUniqueWork("weather-widget-network-$key", ExistingWorkPolicy.KEEP, request)
+    fun network(manager: WorkManager, key: String, request: OneTimeWorkRequest,
+        force: Boolean = false): Operation =
+        manager.enqueueUniqueWork("weather-widget-network-$key",
+            if (force) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP, request)
 }

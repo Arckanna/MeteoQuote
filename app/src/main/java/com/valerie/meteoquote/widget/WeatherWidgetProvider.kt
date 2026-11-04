@@ -49,7 +49,8 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             val ids = manager.getAppWidgetIds(android.content.ComponentName(context, javaClass))
             context.getSharedPreferences("widget_schedule", Context.MODE_PRIVATE).edit()
                 .apply { ids.forEach { putLong("attempt_$it", System.currentTimeMillis()) } }.apply()
-            enqueue(context, ids, force = intent.action == WidgetViews.ACTION_REFRESH)
+            if (intent.action == WidgetViews.ACTION_RENDER) enqueue(context, ids, renderOnly = true)
+            else enqueue(context, ids, force = true)
         }
     }
 
@@ -84,10 +85,11 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    private fun enqueue(context: Context, ids: IntArray, force: Boolean = false) {
+    private fun enqueue(context: Context, ids: IntArray, force: Boolean = false, renderOnly: Boolean = false) {
         if (ids.isEmpty()) return
         val request = OneTimeWorkRequestBuilder<WeatherWidgetWorker>()
-            .setInputData(workDataOf(WeatherWidgetWorker.WIDGET_IDS to ids, WeatherWidgetWorker.FORCE to force))
+            .setInputData(workDataOf(WeatherWidgetWorker.WIDGET_IDS to ids, WeatherWidgetWorker.FORCE to force,
+                WeatherWidgetWorker.RENDER_ONLY to renderOnly))
         ids.forEach { request.addTag("widget-$it") }
         // Earlier Android versions require a foreground service for expedited work.
         if (Build.VERSION.SDK_INT >= 31) {

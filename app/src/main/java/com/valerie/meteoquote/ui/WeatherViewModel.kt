@@ -116,10 +116,14 @@ class WeatherViewModel @javax.inject.Inject constructor(
     }
     private var displayedPlace: String? = null
     private var lastAttempt: java.time.Instant? = null
+    private var lastWidgetRender: WidgetRenderKey? = null
     private fun updateWidgets() {
+        val render = WidgetRenderKey.from(_uiState.value, clock.instant())
+        if (render == lastWidgetRender) return
         val app = getApplication<Application>()
         val component = android.content.ComponentName(app, com.valerie.meteoquote.widget.WeatherWidgetProvider::class.java)
         if (android.appwidget.AppWidgetManager.getInstance(app).getAppWidgetIds(component).isEmpty()) return
+        lastWidgetRender = render
         app.sendBroadcast(android.content.Intent(app, com.valerie.meteoquote.widget.WeatherWidgetProvider::class.java)
             .setAction(com.valerie.meteoquote.widget.WidgetViews.ACTION_RENDER))
     }
@@ -180,9 +184,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
             var fetchedAt: java.time.Instant? = null
             try {
                 weatherRepository.refreshUpdates(targetCity.lat, targetCity.lon, force).collect { result ->
-                    val notifyWidgets = !result.isRefreshing && !result.isAirQualityLoading &&
-                        (_uiState.value.isRefreshing || _uiState.value.isAirQualityLoading ||
-                            _uiState.value.updatedAt != result.fetchedAt)
+                    val notifyWidgets = !result.isRefreshing && !result.isAirQualityLoading
                     if (fetchedAt == null) fetchedAt = clock.instant()
                     val (temp, code) = result.current
                     val condition = WeatherUtils.wmoToLabel(code)
@@ -234,6 +236,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
                         isLoading = false, isRefreshing = false,
                         notice = if (e is com.valerie.meteoquote.data.WeatherStorageException) "Stockage météo indisponible"
                             else "Actualisation impossible. Dernières données conservées.")
+                    updateWidgets()
                     return@launch
                 }
                 val failure = WeatherFailure.from(e)
@@ -252,8 +255,8 @@ class WeatherViewModel @javax.inject.Inject constructor(
         if (index in _uiState.value.cities.indices) {
             if (cancelDetection) nextSelectionIntent()
             cityRepository.saveSelectedIndex(index)
-            updateWidgets()
             _uiState.value = _uiState.value.copy(selectedCityIndex = index)
+            updateWidgets()
             refreshWeather(_uiState.value.cities[index], force = false)
         }
     }
@@ -297,6 +300,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
         if (state.isLoading) return
         val code = state.weatherCode.takeIf { state.error == null && state.currentTemp != null }
         _uiState.value = state.copy(quote = quoteRepository.getQuote(code))
+        updateWidgets()
     }
 
     /** Re-read stored series as time passes, including on returning to the foreground. */
@@ -344,4 +348,5 @@ class WeatherViewModel @javax.inject.Inject constructor(
     }
 
 }
+
 

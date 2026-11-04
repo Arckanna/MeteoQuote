@@ -74,8 +74,9 @@ class WidgetWorkSchedulerTest {
         unmockkStatic(AppWidgetManager::class)
     }
 
-    private fun request(force: Boolean = false) = OneTimeWorkRequestBuilder<WeatherWidgetWorker>()
-        .setInputData(workDataOf(WeatherWidgetWorker.FORCE to force)).build()
+    private fun request(force: Boolean = false, renderOnly: Boolean = false) = OneTimeWorkRequestBuilder<WeatherWidgetWorker>()
+        .setInputData(workDataOf(WeatherWidgetWorker.FORCE to force,
+            WeatherWidgetWorker.RENDER_ONLY to renderOnly)).build()
 
     private suspend fun finished(request: OneTimeWorkRequest): WorkInfo = withTimeout(10_000) {
         manager.getWorkInfoByIdFlow(request.id).first { it?.state?.isFinished == true }!!
@@ -98,12 +99,12 @@ class WidgetWorkSchedulerTest {
             if (failFirstRead) throw WeatherStorageException(IllegalStateException("Cache unavailable"))
             null
         }
-        val a = request()
+        val a = request(renderOnly = true)
         WidgetWorkScheduler.render(manager, a).result.get(10, TimeUnit.SECONDS)
         try {
             withTimeout(10_000) { readA.await() }
             selected.set(1)
-            val b = request()
+            val b = request(renderOnly = true)
             WidgetWorkScheduler.render(manager, b).result.get(10, TimeUnit.SECONDS)
             assertEquals(WorkInfo.State.BLOCKED, manager.getWorkInfoById(b.id).get()!!.state)
             releaseA.complete(Unit)
@@ -113,6 +114,11 @@ class WidgetWorkSchedulerTest {
             assertEquals("B", view.findViewById<TextView>(R.id.widget_city).text.toString())
             assertTrue(view.findViewById<TextView>(R.id.widget_condition).text.contains("Aucune météo enregistrée"))
             coVerify(exactly = 0) { weather.fetchWeather(any(), any()) }
+            coVerify(exactly = 0) { weather.fetchWeatherIfNeeded(any(), any(), any()) }
+            for (city in places) {
+                val key = CachePolicy.key(city.lat, city.lon)
+                assertTrue(manager.getWorkInfosForUniqueWork("weather-widget-network-$key").get().isEmpty())
+            }
         } finally { releaseA.complete(Unit) }
     }
 
@@ -145,9 +151,43 @@ class WidgetWorkSchedulerTest {
             }
             val key = CachePolicy.key(43.0, 1.0)
             val downloads = manager.getWorkInfosForUniqueWork("weather-widget-network-$key").get()
+                .filterNot { it.state.isFinished }
             assertEquals(1, downloads.size)
             assertEquals(WorkInfo.State.ENQUEUED, downloads.single().state)
             coVerify(exactly = 0) { weather.fetchWeather(any(), any()) }
+            coVerify(exactly = 0) { weather.fetchWeatherIfNeeded(any(), any(), any()) }
         } finally { releaseA.complete(Unit) }
+    }
+
+    @Test fun manualRefreshReplacesPendingAutomaticDownloadAndKeepsForceAtExecution() = runBlocking {
+        val fresh = WeatherResult(20.0 to 0, emptyList(), emptyList(), 0.0, 0.0,
+            null, -1, -1, null, fetchedAt = Instant.now())
+        coEvery { weather.fetchWeatherIfNeeded(43.0, 1.0, true) } returns fresh
+        val key = CachePolicy.key(43.0, 1.0)
+        val name = "weather-widget-network-$key"
+        val automatic = request()
+        WidgetWorkScheduler.render(manager, automatic).result.get(10, TimeUnit.SECONDS)
+        assertEquals(WorkInfo.State.SUCCEEDED, finished(automatic).state)
+        val original = manager.getWorkInfosForUniqueWork(name).get().single()
+        val forced = request(force = true)
+        WidgetWorkScheduler.render(manager, forced).result.get(10, TimeUnit.SECONDS)
+        assertEquals(WorkInfo.State.SUCCEEDED, finished(forced).state)
+        // REPLACE can prune the cancelled WorkSpec; either way it must no longer be pending.
+        assertTrue(manager.getWorkInfoById(original.id).get()?.state?.isFinished != false)
+        val manual = manager.getWorkInfosForUniqueWork(name).get().single { !it.state.isFinished }
+        assertNotEquals(original.id, manual.id)
+        val laterAutomatic = request()
+        WidgetWorkScheduler.render(manager, laterAutomatic).result.get(10, TimeUnit.SECONDS)
+        assertEquals(WorkInfo.State.SUCCEEDED, finished(laterAutomatic).state)
+        assertEquals(manual.id, manager.getWorkInfosForUniqueWork(name).get().single { !it.state.isFinished }.id)
+        // The cache becomes fresh while connectivity is absent; the manual intent still wins.
+        coEvery { weather.cachedWeather(any(), any()) } returns fresh
+        WorkManagerTestInitHelper.getTestDriver(context)!!.setAllConstraintsMet(manual.id)
+        val done = withTimeout(10_000) {
+            manager.getWorkInfoByIdFlow(manual.id).first { it?.state?.isFinished == true }!!
+        }
+        assertEquals(WorkInfo.State.SUCCEEDED, done.state)
+        coVerify(exactly = 1) { weather.fetchWeatherIfNeeded(43.0, 1.0, true) }
+        coVerify(exactly = 0) { weather.fetchWeatherIfNeeded(any(), any(), false) }
     }
 }

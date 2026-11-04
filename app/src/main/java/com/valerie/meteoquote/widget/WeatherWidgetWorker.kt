@@ -51,21 +51,25 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
             cached = weatherRepository.cachedWeather(city.lat, city.lon)
             publish(cached)
             if (!inputData.getBoolean(NETWORK, false)) {
+                if (inputData.getBoolean(RENDER_ONLY, false) && !inputData.getBoolean(FORCE, false))
+                    return Result.success()
                 if (inputData.getBoolean(FORCE, false) || cached?.fetchedAt?.let {
                     com.valerie.meteoquote.data.CachePolicy.fresh(it.toEpochMilli(), java.time.Instant.now())
                 } != true) {
                     val request = androidx.work.OneTimeWorkRequestBuilder<WeatherWidgetWorker>()
-                        .setInputData(androidx.work.workDataOf(NETWORK to true, NETWORK_KEY to key))
+                        .setInputData(androidx.work.workDataOf(NETWORK to true, NETWORK_KEY to key,
+                            FORCE to inputData.getBoolean(FORCE, false)))
                         .setConstraints(androidx.work.Constraints.Builder()
                             .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                         .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, java.util.concurrent.TimeUnit.SECONDS)
                         .build()
                     WidgetWorkScheduler.network(
-                        androidx.work.WorkManager.getInstance(applicationContext), key, request).await()
+                        androidx.work.WorkManager.getInstance(applicationContext), key, request,
+                        force = inputData.getBoolean(FORCE, false)).await()
                 }
                 return Result.success()
             }
-            val result = weatherRepository.fetchWeather(city.lat, city.lon)
+            val result = weatherRepository.fetchWeatherIfNeeded(city.lat, city.lon, inputData.getBoolean(FORCE, false))
             publish(result)
             return Result.success()
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -92,5 +96,6 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
         const val NETWORK = "network"
         const val NETWORK_KEY = "network_key"
         const val FORCE = "force"
+        const val RENDER_ONLY = "render_only"
     }
 }
