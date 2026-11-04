@@ -21,4 +21,3 @@ interface WeatherRepository {
     fun weatherUpdates(lat: Double, lon: Double): kotlinx.coroutines.flow.Flow<WeatherResult> =
         kotlinx.coroutines.flow.flow { emit(fetchWeather(lat, lon)) }
 }
-

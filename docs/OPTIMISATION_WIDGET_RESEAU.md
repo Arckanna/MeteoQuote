@@ -5,7 +5,8 @@ Branche issue de la version 7.4. Le rendu des listes, le stockage JSON/Room et l
 ## Comportement
 
 - L’écran compare uniquement les informations affichées par le widget avant d’envoyer ACTION_RENDER. Un changement de ville, de météo, de citation, de date de téléchargement ou le franchissement du seuil d’ancienneté provoque un rendu ; le chargement et l’AQI seuls ne le provoquent pas.
-- ACTION_RENDER utilise la lecture bornée du cache existante, sans créer de travail WorkManager ni déclencher de réseau.
+- ACTION_RENDER ajoute un passage à la file locale WorkManager avec RENDER_ONLY : la dernière sélection est rendue depuis le cache, sans déclencher de réseau. La file utilise APPEND_OR_REPLACE pour conserver les demandes reçues pendant un rendu ; les lectures directes lors des redimensionnements restent bornées.
+- Le réseau reste séparé par lieu : KEEP pour les demandes automatiques, REPLACE pour les demandes forcées afin de ne pas hériter d'une décision automatique de cache ou d'un délai de reprise. Le worker local attend l'enregistrement de cette demande avant de terminer.
 - Un travail réseau automatique différé revérifie les 30 minutes de fraîcheur au moment de son exécution. L’actualisation manuelle transmet explicitement FORCE et remplace un travail en attente au lieu de perdre l’intention utilisateur.
 - Les échecs des services météo et AQI ont une temporisation indépendante par lieu : 1, 2, 4, 8, puis 15 minutes maximum après les échecs successifs. Une vérification pendant cette période ne fait pas de nouvel appel et ne prolonge pas le délai. Le dernier échec est conservé pour signaler l’indisponibilité météo ; l’AQI reste facultatif.
 - Une réussite remet le compteur du service à zéro. Les demandes forcées ignorent la temporisation. L’annulation n’est pas comptée comme un échec. Ce petit état reste en mémoire et est réinitialisé au redémarrage du processus.
