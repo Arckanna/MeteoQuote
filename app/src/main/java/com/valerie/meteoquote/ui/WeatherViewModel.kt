@@ -348,5 +348,3 @@ class WeatherViewModel @javax.inject.Inject constructor(
     }
 
 }
-
-
