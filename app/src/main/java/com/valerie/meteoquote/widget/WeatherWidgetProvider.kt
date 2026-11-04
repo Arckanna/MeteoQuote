@@ -96,8 +96,10 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         val pending = goAsync()
         scheduling.execute {
             try {
-                WorkManager.getInstance(context).enqueueUniqueWork("weather-widget",
-                    ExistingWorkPolicy.KEEP, request.build()).result.get(8, TimeUnit.SECONDS)
+                // Append a durable final pass: KEEP would drop selection changes and FORCE.
+                // No network constraint here: even an uncached city must render offline.
+                WidgetWorkScheduler.render(WorkManager.getInstance(context), request.build())
+                    .result.get(8, TimeUnit.SECONDS)
             } catch (failure: Exception) {
                 android.util.Log.w("WeatherWidget", "Widget scheduling failed", failure)
                 val manager = AppWidgetManager.getInstance(context)
