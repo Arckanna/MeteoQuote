@@ -6,7 +6,9 @@ Version déclarée dans le dépôt : **7.4** (`versionCode = 22`). Compatible à
 
 [![Android CI](https://github.com/Arckanna/MeteoQuote/actions/workflows/android.yml/badge.svg)](https://github.com/Arckanna/MeteoQuote/actions/workflows/android.yml)
 
-<img src="art/screenshot_main.jpg" alt="Capture d'écran" width="1080"/>
+<img src="art/screenshot_main.png" alt="Écran d’accueil de Météo &amp; Citation : météo, indices UV et qualité de l’air, citation du jour" width="420"/>
+
+Capture de la version 7.4 sur émulateur Android, réalisée le 5 novembre 2026.
 
 ## Fonctionnalités
 
