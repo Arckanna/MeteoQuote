@@ -1,5 +1,7 @@
 # Audit de fiabilité et plan d’évolution — 22 octobre 2026
 
+> **Archive historique — classée le 8 novembre 2026.** Les défauts et nombres de tests ci-dessous concernent la révision auditée, pas tous le code actuel. Room, l'AQI indépendant, la protection des intentions et la CI `OfflineCacheTest` sont maintenant implémentés. Voir [le cache livré](LOT_C_LIVRAISON.md), [le widget/réseau actuel](OPTIMISATION_WIDGET_RESEAU.md) et [le suivi de revue](REVUE_CODE_2026-11-02.md). Les scénarios de recette et risques complémentaires restent utiles ; ils ne sont pas déclarés tous résolus.
+
 ## Conclusion
 
 La priorité est de fiabiliser les données présentées et les opérations asynchrones avant d’ajouter des fonctions. Le projet dispose déjà d’un socle utile : repositories injectés avec Hilt, StateFlow, annulation des requêtes météo, transport borné avec retries, tests unitaires et tests Android, citation quotidienne persistée.

@@ -1,15 +1,15 @@
 # Injection de dépendances
 
-La branche `codex/injection-dependances` remplace la création manuelle des repositories par Hilt, sans modifier les appels réseau, la politique de retry, les préférences, les citations ni les layouts.
+Guide du graphe de production, relu le 8 novembre 2026. L'introduction initiale de Hilt date d'octobre ; le graphe ci-dessous inclut les évolutions Room et recherche livrées depuis.
 
 ## Graphe de production
 
 - `MeteoQuoteApplication` initialise Hilt et fournit à WorkManager sa `HiltWorkerFactory`.
 - `RepositoryModule`, installé dans `SingletonComponent`, fournit un transport HTTP, une horloge UTC et les trois repositories partagés pendant la vie du processus. Les repositories Android reçoivent exclusivement le contexte de l’application.
-- `WeatherRepository` est le contrat météo ; `OpenMeteoWeatherRepository` conserve le parsing, la récupération météo et l’AQI facultatif.
+- `WeatherRepository` est fourni par `OfflineWeatherRepository`, avec la base singleton `WeatherDatabase`. `OpenMeteoWeatherRepository` est sa source distante et conserve le parsing, la récupération météo et l’AQI facultatif. Les lieux enregistrés et récents déterminent les clés à conserver lors de la purge.
 - `CityRepository` est le contrat de recherche et de persistance des villes ; `AndroidCityRepository` conserve les préférences et le géocodage existants.
-- `QuoteRepository` est le contrat des citations ; `LocalQuoteRepository` conserve la sélection contextualisée et les index persistés.
-- `WeatherViewModel` utilise `@HiltViewModel` et l’injection par constructeur. `MainActivity`, annotée `@AndroidEntryPoint`, utilise la fabrique de ViewModel fournie par Hilt et reçoit le même repository de villes pour la recherche.
+- `QuoteRepository` est fourni par `LocalQuoteRepository`, qui persiste une attribution par date locale. Les anciens index ne servent qu'à la migration initiale.
+- `WeatherViewModel` utilise `@HiltViewModel` et l’injection par constructeur. Il pilote aussi la recherche et sa génération d'intention partagée avec la localisation et les choix manuels. `MainActivity`, annotée `@AndroidEntryPoint`, utilise la fabrique Hilt et affiche `searchState`. Elle reçoit encore le repository de villes, mais n'exécute plus le géocodage de recherche directement ; les récents restent gérés dans l'Activity.
 - `WeatherWidgetWorker` utilise `@HiltWorker` et `@AssistedInject` : WorkManager fournit le contexte et les paramètres, Hilt fournit les repositories. L’ancienne `WeatherViewModelFactory` est supprimée.
 
 Seul l’initialiseur WorkManager par défaut est retiré des métadonnées AndroidX Startup. Les autres initialisations AndroidX sont conservées. Le nom du worker et les noms des préférences restent identiques, notamment pour les travaux déjà enregistrés et les données existantes.

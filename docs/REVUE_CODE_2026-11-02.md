@@ -4,6 +4,16 @@ Référence examinée : `b74fe29`, application 7.4. Revue statique du parcours p
 
 ## Constats à corriger
 
+### Suivi au 8 novembre 2026
+
+| Constat initial | État dans le code relu | Preuve / suite |
+|---|---|---|
+| 1 — Recherche tardive | Corrigé | `WeatherViewModel.searchCity`, `selectionIntent`, saisie dans `searchState` ; tests de réponse tardive, choix manuel, nouvelle saisie et localisation dans `WeatherViewModelTest`. |
+| 2 — Rendu widget perdu | Corrigé | File locale `APPEND_OR_REPLACE`, `RENDER_ONLY`, réseau distinct par lieu ; tests avec barrières dans `WidgetWorkSchedulerTest`. La fusion avec les optimisations réseau conserve `FORCE` et `fetchWeatherIfNeeded`. |
+| 3 — Citation et météo ancienne | Toujours ouvert | `refreshDailyQuote()` ne vérifie encore que l'absence d'erreur et la présence de température. La règle de fraîcheur commune reste à implémenter. |
+
+Les descriptions et numéros de ligne ci-dessous restent ceux du 2 novembre. Les quatre pistes d'optimisation restent proposées : la temporisation réseau n'élimine ni les reconstructions de vues ni les relectures/décodages. Cette mise à jour est documentaire, sans nouvelle exécution de tests.
+
 ### 1. [P2] Une recherche tardive remplace un choix plus récent
 
 Emplacement : `MainActivity.kt:208–221`.
@@ -41,13 +51,13 @@ Estimations indicatives, développement et tests compris ; à affiner après rep
 
 | Ordre | Lot | Résultat attendu | Charge indicative |
 |---|---|---|---|
-| 1 | Fiabilité | Corriger les trois constats et ajouter les tests de concurrence/date associés | 2–4 jours |
+| 1 | Fiabilité | Reste le constat 3 (citation/fraîcheur) et son test de minuit ; constats 1 et 2 corrigés | À réestimer sur ce périmètre réduit |
 | 2 | Fluidité | Rendus conditionnels, moins de décodages ; mesures avant/après sur build release | 2–3 jours |
-| 3 | Maintenance | Recherche et récents hors de l'Activity, chaînes dans les ressources, règles de fraîcheur communes, Clock injectée dans le widget | 2–4 jours |
+| 3 | Maintenance | Recherche déjà déplacée ; restent les récents hors de l'Activity, chaînes dans les ressources, règles de fraîcheur communes et Clock injectée dans le widget | À réestimer |
 | 4 | Validation | Étendre la CI Android au-delà du seul `OfflineCacheTest` : ville manuelle, citation, injection et interface ; recette widget et permissions sur appareil | 2–4 jours |
 | 5 | Évolutions produit | Choix parmi plusieurs villes homonymes, thème sombre cohérent, puis configuration de ville par widget | À cadrer par fonctionnalité |
 
-Mettre à jour le statut de `CAHIER_DES_CHARGES_ROADMAP.md` : il décrit encore certains éléments désormais implémentés comme futurs, notamment le cache Room. Conserver la migration Compose progressive existante. Une réécriture globale du réseau ou de l'interface n'est pas nécessaire pour les gains identifiés.
+Le statut de [la roadmap](CAHIER_DES_CHARGES_ROADMAP.md) a été réconcilié le 8 novembre, notamment pour Room. Conserver la migration Compose progressive existante. Une réécriture globale du réseau ou de l'interface n'est pas nécessaire pour les gains identifiés.
 
 ## Points solides à préserver
 

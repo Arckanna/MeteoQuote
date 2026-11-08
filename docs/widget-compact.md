@@ -1,5 +1,15 @@
 # Widget compact — 20 octobre 2026
 
+## Référence actuelle — 8 novembre 2026
+
+- Widget RemoteViews, minimum et redimensionnement minimum **180 × 60 dp**, cible **3 × 1 cellules** ; l'espace final dépend du lanceur.
+- Le descriptif apparaît à partir de `80 × fontScale` dp de hauteur ; la citation à partir de `136 × fontScale` dp. Le corps ouvre l'application ; l'actualisation possède sa propre action.
+- Le rendu reconstruit les vues à partir de **Room et QuoteRepository**. L'ancien état `widget_render_v1` n'est plus relu. Le redimensionnement ne déclenche pas de réseau.
+- Les demandes de rendu utilisent la file locale `APPEND_OR_REPLACE`. `ACTION_RENDER` demande seulement une lecture du cache. Les téléchargements, indépendants, utilisent `KEEP` par lieu en automatique et `REPLACE` en cas de demande forcée. Voir [les règles réseau et widget](OPTIMISATION_WIDGET_RESEAU.md).
+- Tous les widgets partagent la ville sélectionnée dans l'application. Une configuration différente par widget reste une évolution proposée.
+
+Les sections suivantes sont l'historique des 20–21 octobre : elles expliquent les anciens choix et validations, mais leurs préférences de rendu, dimensions initiales et mises à jour partielles ne décrivent plus toutes le code actuel.
+
 ## Correctif du 21 octobre 2026
 
 Branche `codex/widget-ajout-correctif`, basée sur `codex/widget-compact`. Le contrôle initial du rendu n’avait pas couvert le cycle réel du lanceur. Sur l’émulateur, les changements de composants WorkManager entraînaient des notifications de changement du provider, une reconstruction du widget sur son layout initial, puis des relances répétées du worker.

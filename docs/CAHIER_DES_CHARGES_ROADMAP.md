@@ -1,9 +1,18 @@
 # Météo & Citation — Cahier des charges et roadmap
 
-Version de cadrage : 1.0 — 19 octobre 2026.
-Statut : cahier de cadrage ; Lot 0 implémenté, autres lots encore proposés.
-Suivi du 20 octobre 2026 : le Lot 0 « Citation quotidienne fiable et règles de date » est implémenté sur une branche dédiée ; voir [règles et validation du Lot 0](lot-0-citation-quotidienne.md). Les autres lots restent proposés. À la demande de l’utilisateur, les prévisions quotidiennes commencent désormais à J+1.
-Référence du projet consulté : application 7.1, versionCode 19.
+Version de cadrage initiale : 1.0 — 19 octobre 2026. Statuts réconciliés le 8 novembre 2026 avec le code local, application 7.4, versionCode 22.
+
+| Domaine | État actuel | Suite |
+|---|---|---|
+| Citation quotidienne et J+1 à J+7 | Implémentés | Enrichissement éditorial et correction de la fraîcheur lors du renouvellement au premier plan. |
+| Cache Room multi-lieu | Implémenté, schéma v1 à deux tables d'instantanés | Recette des mises à jour ; migrations explicites lors d'un futur changement de schéma. |
+| Recherche/localisation | Génération d'intention commune, recherche dans le ViewModel | Choix parmi plusieurs villes homonymes et identité stable des villes. |
+| Widget compact/étendu | Implémenté en RemoteViews, cache partagé, file de rendu et réseau séparés | Recette sur lanceurs réels ; ville par widget éventuelle. Glance reste optionnel. |
+| Interface | Citation Compose ; autres sections Views/XML | Migration progressive, thème sombre et captures comparées restent proposés. |
+| CI | Tests unitaires/lint/builds et `OfflineCacheTest` sur API 24/36 | Étendre la couverture instrumentée ; le résultat distant n'est pas certifié par cette relecture. |
+| Résumé matinal, conseils et animations | Non implémentés | Options produit à cadrer, pas des fonctions promises par la version actuelle. |
+
+Références : [citation](lot-0-citation-quotidienne.md), [cache livré](LOT_C_LIVRAISON.md), [widget et réseau](OPTIMISATION_WIDGET_RESEAU.md), [défauts et optimisations suivis](REVUE_CODE_2026-11-02.md). Les sections de spécification restent des objectifs lorsqu'elles dépassent ce tableau.
 
 ## 1. Vision produit
 
@@ -21,7 +30,7 @@ Public visé : personnes recherchant une météo quotidienne accessible, accompa
 - Consulter des informations cohérentes dans l’application, le widget et, ultérieurement, les notifications.
 - Conserver les fonctions utilisables à police 200 %, avec TalkBack et sur petit écran.
 
-## 2. État de départ et contraintes
+## 2. État actuel et contraintes
 
 ### Éléments constatés dans le projet
 
@@ -29,15 +38,17 @@ Public visé : personnes recherchant une météo quotidienne accessible, accompa
 - Open-Meteo via OkHttp, délais bornés, retry contrôlé et AQI facultatif.
 - Interface hybride : citation Compose Material 3, sections météo et prévisions en Views/XML.
 - Ordre actuel : ville → météo actuelle → UV/AQI → citation → horaires → trois/sept jours → actions secondaires.
-- Widget existant, actualisé par WorkManager.
+- Widget RemoteViews, actualisé par WorkManager ; rendu local et téléchargement séparés.
+- Cache météo/AQI Room par lieu, données horodatées, temporisation automatique après échec.
+- Recherche dans le ViewModel, génération d'intention commune avec localisation et sélection manuelle ; récents encore gérés dans l'Activity.
 - Suppression du bouton « Nouvelle citation » dans l’interface.
-- 58 tests unitaires réussis lors des vérifications précédentes, tests Android et captures sur quatre profils. Ces résultats historiques ne remplacent pas une recette de chaque future version.
+- Tests unitaires, tests Android et captures sur quatre profils présents dans le dépôt. Les résultats historiques des livraisons ne remplacent pas une recette de chaque future version.
 
 L’appellation « Clean Architecture complète » n’est pas un objectif à elle seule : conserver une séparation proportionnée entre présentation, accès aux données et modèles, sans multiplier les couches sans besoin.
 
-### Point à corriger en priorité
+### Point restant à corriger en priorité
 
-`LocalQuoteRepository.getQuote` conserve un index par catégorie météo. La date sert de valeur initiale lorsque cet index n’existe pas encore ; elle ne provoque pas systématiquement son renouvellement les jours suivants. Le contrat « une journée, une citation » nécessite donc une évolution métier explicite et des tests dédiés.
+`LocalQuoteRepository` persiste désormais une attribution par date locale. Le défaut initial d'index quotidien est corrigé. En revanche, `WeatherViewModel.refreshDailyQuote()` peut encore attribuer la nouvelle citation à partir d'une météo ancienne : unifier la règle de fraîcheur avec la collecte météo et le widget. Voir le constat 3 de [la revue du 2 novembre](REVUE_CODE_2026-11-02.md).
 
 ### Contraintes de compatibilité
 
@@ -53,12 +64,12 @@ L’appellation « Clean Architecture complète » n’est pas un objectif à el
 
 | Priorité | Évolution | Valeur attendue | Dépendance principale |
 |---|---|---|---|
-| P0 | Citation quotidienne fiable et contenu enrichi | Rend la promesse de l’application tangible | Règle de date et identité de citation |
-| P0 | Cache local Room et affichage des données périmées | Rend l’application utile hors ligne | États de fraîcheur des données |
+| P2 | Corriger la fraîcheur à l'attribution quotidienne ; règle de date déjà livrée | Évite une catégorie choisie sur une météo ancienne | Règle commune écran/widget |
+| Livré | Cache local Room et affichage des données périmées | Rend l’application utile hors ligne | Maintenir les tests et la recette de mise à jour |
 | P0 | Tests de référence et recette des mises à jour | Sécurise les migrations | États de test déterministes |
 | P1 | Migration Compose par sections | Simplifie le rendu et les évolutions UX | Tests visuels en place |
 | P1 | Thème cohérent, sombre et couleurs dynamiques | Améliore le confort et la personnalisation | Tokens visuels partagés |
-| P1 | Widget modernisé, Glance si le prototype convient | Rend météo et citation visibles hors de l’application | Cache et citation partagés |
+| P1 | Recette du widget existant ; migration Glance seulement si utile | Fiabilité sur les lanceurs réels | Cache et citation partagés déjà livrés |
 | P2 | Résumé matinal facultatif | Crée un rendez-vous quotidien | Données et citation fiables |
 | P2 | Conseils de conditions météo marquées | Aide à interpréter les prévisions | Données fraîches, règles explicables |
 | P3 | Retrofit et sérialisation typée | Améliore la maintenance si nécessaire | Parité réseau démontrée |
@@ -70,7 +81,7 @@ Les changements de bibliothèques ne constituent pas, seuls, des bénéfices uti
 
 ### F01 — Citation quotidienne et identité éditoriale
 
-Proposition de règle : une citation principale par date locale du téléphone, commune à l’application, au widget et aux notifications. Son ambiance est choisie à partir de la première météo exploitable du jour ; la citation reste ensuite stable jusqu’au changement de date, même après actualisation, changement de ville ou redémarrage.
+Règle implémentée : une citation principale par date locale du téléphone, commune à l’application et au widget. Les notifications sont une extension proposée. La météo disponible lors de la première attribution choisit la catégorie ; sans météo utilisable, une pensée neutre peut être attribuée, notamment lors du rendu local du widget. La citation reste ensuite stable jusqu’au changement de date, même après actualisation, changement de ville ou redémarrage.
 
 Le fond et l’accroche peuvent suivre la météo affichée. Le texte est sélectionné selon l’ambiance au moment de son attribution ; sa stabilité quotidienne est prioritaire ensuite. Cette distinction évite de promettre une nouvelle sélection à chaque changement du ciel.
 
@@ -88,11 +99,11 @@ Exigences :
 
 Contenu : viser une première collection de 60 à 100 citations ou pensées validées, avec une couverture équilibrée des ambiances. Ce volume reste une cible éditoriale, à ajuster au budget et aux droits d’utilisation. Vérifier les attributions ; employer des textes originaux ou utilisables avec une provenance documentée. Prévoir des formulations qui restent naturelles lorsque la météo change dans la journée.
 
-Critères de recette : même texte et même auteur pendant une journée dans les trois points d’entrée ; nouvelle attribution au jour suivant ; aucun auteur inventé ; citation longue et auteur absent correctement affichés ; aucun réseau nécessaire pour sélectionner le texte local.
+Critères de recette : même texte et même auteur pendant une journée dans l'application et le widget, puis dans les notifications si elles sont ajoutées ; nouvelle attribution au jour suivant ; aucun auteur inventé ; citation longue et auteur absent correctement affichés ; aucun réseau nécessaire pour sélectionner le texte local.
 
 ### F02 — Consultation hors ligne avec Room
 
-Le stockage local devient la source des données présentées à l’interface. Le réseau met à jour ce stockage après validation, selon le principe offline-first décrit par Android. [Référence](https://developer.android.com/topic/architecture/data-layer/offline-first)
+Le stockage local est la source des données présentées à l’interface. Le réseau le met à jour après validation. Le schéma réellement livré comporte deux tables d'instantanés et des séries JSON validées ; voir [la livraison Room](LOT_C_LIVRAISON.md). Les exigences suivantes décrivent le contrat à préserver.
 
 Données à conserver : identité du lieu, coordonnées nécessaires à la requête, fuseau fourni par l’API, météo courante, prévisions horaires et quotidiennes, UV, AQI et horodatages. Utiliser des dates et types explicites ; ne pas stocker uniquement des libellés formatés pour l’écran.
 
@@ -109,16 +120,16 @@ Exigences :
 - Recherche d’une nouvelle ville indisponible sans réseau : proposer les villes et récents déjà connus avec un message clair.
 - Les coordonnées issues de « Ma position » ne constituent pas un historique de déplacements.
 
-Politique initiale proposée, configurable dans le code et couverte par des tests :
+Politique de récupération implémentée dans `CachePolicy`, couverte par des tests :
 
 | Ancienneté depuis récupération | Présentation et comportement |
 |---|---|
-| Jusqu’à 30 min | Dernières données considérées récentes ; actualisation manuelle possible |
-| De 30 min à 24 h | Afficher les données avec leur âge et tenter une mise à jour ; signaler l’absence de réseau si nécessaire |
-| Plus de 24 h | Qualifier explicitement la météo comme « Dernières données connues » ; ne plus la présenter comme actuelle |
-| Plus de 7 jours | Purger le cache météo expiré ; conserver les villes et les préférences |
+| Moins de 30 min | Récupération récente ; actualisation manuelle possible |
+| De 30 min à moins de 24 h | Données datées ; tentative automatique soumise à la temporisation après échec |
+| De 24 h à moins de 7 jours | Indicateur météo `isOld`, données conservées ; l'AQI suit son propre âge |
+| À partir de 7 jours | Cache météo non présenté ; purge lors des consultations, villes et préférences conservées |
 
-Ces seuils sont des choix produit à tester, pas des garanties de fraîcheur des fournisseurs. L’AQI pourra avoir un seuil distinct. Un AQI ancien ne doit jamais être affiché comme une qualité de l’air actuellement garantie.
+Ces seuils ne garantissent pas la fraîcheur du fournisseur. Le titre « Météo actuelle » est régi séparément par `WeatherFreshness` : heure des conditions connue, non future et âgée de moins d'une heure, sans téléchargement daté du futur. L'AQI possède sa propre date et n'est plus présenté après 24 heures.
 
 Prévoir des états distincts : première ouverture sans cache, cache récent, cache ancien en cours de mise à jour, échec avec cache, échec sans cache, résultat partiel sans AQI. Un rafraîchissement ne doit pas vider inutilement tout l’écran.
 
@@ -271,15 +282,15 @@ Le rollback d’une version utilisant un nouveau schéma Room doit être prépar
 ## 7. Données personnelles et maintenance
 
 - Stocker uniquement les lieux et données nécessaires aux fonctions activées ; permettre d’effacer les données locales depuis les réglages.
-- Mettre à jour les exclusions de sauvegarde pour la future base Room contenant des coordonnées, en cohérence avec les préférences actuelles.
+- Préserver les exclusions de sauvegarde/transfert des bases Room et des préférences déjà présentes ; les vérifier à chaque évolution du stockage.
 - Retirer les entrées locales devenues inutiles selon la politique de rétention ; ne pas créer d’historique de localisation.
 - Éviter les coordonnées et le contenu sensible dans les logs ; messages d’erreur utilisateur compréhensibles.
 - Documenter les nouveaux traitements et permissions dans la confidentialité et les déclarations de distribution applicables lors de la livraison.
 - Conserver les crédits et sources météo, AQI et citations accessibles dans les actions secondaires.
 
-## 8. Roadmap et charge indicative
+## 8. Estimations du cadrage initial — historique
 
-Estimations en jours-personne de développement, tests et documentation compris. Elles supposent une personne familière du projet et excluent les délais de validation Play, le recrutement de testeurs et l’acquisition des droits éditoriaux. Elles seront affinées après le cadrage et les prototypes.
+Estimations d'octobre, conservées pour expliquer le découpage initial : **ne pas les additionner comme charge restante**. Citation, Room et widget RemoteViews sont déjà implémentés ; le tableau d'état en tête fait référence. Réestimer les travaux encore ouverts après cadrage, notamment la recette et les options produit. Les chiffres ci-dessous incluaient développement, tests et documentation, hors délais Play et validation éditoriale.
 
 | Lot | Contenu livrable | Charge indicative | Condition de passage |
 |---|---|---|---|
@@ -296,14 +307,14 @@ Socle et expérience visuelle, lots 0 à 3 : environ 16–28 jours-personne. Ave
 
 Chaque lot constitue une livraison testable distincte ; ne pas publier simultanément une nouvelle base, une réécriture réseau et une refonte complète de l’interface. Une bêta intermédiaire suit au minimum les lots hors ligne, interface et notifications.
 
-## 9. Décisions produit proposées pour le premier cadrage
+## 9. Décisions et options produit
 
 1. Une citation globale par date locale du téléphone, stable malgré les changements de ville ; ambiance graphique toujours liée à la météo affichée.
 2. Pas de bouton de changement ; enrichir le contenu et garantir son renouvellement quotidien.
 3. Seuils de cache 30 min / 24 h / purge à 7 jours à confirmer en bêta.
 4. Widget compact et étendu partageant initialement la ville de référence ; configuration par widget ultérieure.
-5. Résumé matinal désactivé par défaut, horaire approximatif et fenêtre maximale de deux heures.
-6. Thèmes clair/sombre/système ; couleurs du téléphone proposées en option.
+5. Option non implémentée : résumé matinal désactivé par défaut, horaire approximatif et fenêtre maximale de deux heures.
+6. Options non implémentées : thèmes clair/sombre/système et couleurs du téléphone.
 7. Conseils intégrés et animation discrète en lots facultatifs ; notifications d’alertes officielles hors périmètre initial.
 
 Ces propositions rendent le périmètre implémentable. Elles peuvent être ajustées avant le lot concerné sans lancer d’emblée toutes les évolutions.
