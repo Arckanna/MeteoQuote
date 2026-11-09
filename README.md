@@ -25,7 +25,7 @@ Capture de la version 7.4 sur émulateur Android, réalisée le 5 novembre 2026.
 
 La recherche est pilotée par le ViewModel. Une nouvelle saisie, une sélection manuelle ou une demande de localisation invalide les résultats précédents : une réponse tardive ne remplace pas le dernier choix et n’efface pas une nouvelle saisie.
 
-Le cache météo Room est conservé par lieu : fraîcheur de récupération de **30 minutes**, données marquées anciennes à partir de **24 heures**, expiration à **7 jours**. L’heure des conditions fournies reste distincte de l’heure de téléchargement. Le cache AQI est indépendant.
+Le cache météo Room est conservé par lieu : fraîcheur de récupération de **30 minutes**, indicateur de cache ancien à partir de **24 heures**, expiration à **7 jours**. L’heure des conditions fournies reste distincte de l’heure de téléchargement : le titre « Météo actuelle » exige des conditions datées de moins d’une heure et des dates cohérentes. Le cache AQI est indépendant.
 
 Les rendus du widget sont mis en file pour conserver les demandes reçues pendant une mise à jour. Un rendu demandé par l’application lit uniquement le cache, même sans réseau. Les téléchargements sont séparés par lieu : les demandes automatiques partagent le travail en attente et revérifient la fraîcheur à l’exécution ; une demande forcée est prioritaire. Les échecs automatiques météo et AQI déclenchent une temporisation indépendante par lieu, de 1 à 15 minutes.
 
@@ -75,6 +75,7 @@ La [CI Android](.github/workflows/android.yml) exécute les tests unitaires et l
 
 ## Documentation
 
+- [Index des guides, travaux ouverts et archives](docs/README.md)
 - [Cache hors ligne : livraison et validation](docs/LOT_C_LIVRAISON.md)
 - [Optimisation du widget et du réseau](docs/OPTIMISATION_WIDGET_RESEAU.md)
 - [Widget compact et redimensionnement](docs/widget-compact.md)
@@ -84,9 +85,9 @@ La [CI Android](.github/workflows/android.yml) exécute les tests unitaires et l
 - [Revue du code du 2 novembre 2026](docs/REVUE_CODE_2026-11-02.md)
 - [Cahier des charges et roadmap](docs/CAHIER_DES_CHARGES_ROADMAP.md)
 - [Audit de modernisation Android](docs/ANDROID_MODERNIZATION.md)
-- [Procédure de publication historique](docs/RELEASE.md)
+- [Préparer une publication](docs/RELEASE.md)
 
-Les audits, la roadmap et les comptes rendus décrivent l’état du projet à leur date de rédaction. Le guide de publication concerne initialement la version 6.7 : reprendre la version déclarée dans [app/build.gradle.kts](app/build.gradle.kts) pour une nouvelle livraison.
+Les guides ont été relus le 8 novembre 2026 ; les anciens audits et plans sont identifiés comme historiques dans l’index. La roadmap et la revue du code indiquent les corrections déjà livrées et les travaux encore ouverts. Pour une nouvelle livraison, vérifier la version déclarée dans [app/build.gradle.kts](app/build.gradle.kts) et reprendre la checklist de publication.
 
 ## Licence
 

@@ -1,6 +1,6 @@
 # Optimisation widget et réseau
 
-Branche issue de la version 7.4. Le rendu des listes, le stockage JSON/Room et la configuration CI restent inchangés.
+Guide relu le 8 novembre 2026, sur la version déclarée 7.4. Le rendu des listes et le stockage JSON/Room restent des sujets d'optimisation distincts.
 
 ## Comportement
 
@@ -17,6 +17,8 @@ Branche issue de la version 7.4. Le rendu des listes, le stockage JSON/Room et l
 Tests unitaires ajoutés : délais et plafond, limite exacte de reprise, vérifications répétées sans prolongation, remise à zéro et séparation des lieux/services ; clé de rendu widget indépendante du chargement et de l’AQI, changement de ville/citation et passage au statut ancien.
 
 Tests du dépôt ajoutés : relecture du cache par un travail différé, seuil des 30 minutes, demande forcée, temporisation météo, reprise après réussite et temporisation AQI indépendante. Ils utilisent l’horloge contrôlée et le transport simulé déjà présents dans la suite.
+
+`WidgetWorkSchedulerTest` couvre aussi, avec WorkManager sous Robolectric et barrières contrôlées : A suspendu puis B sans cache ni réseau ; erreur de cache de A sans annuler B ; demandes forcées conservées malgré un rendu ordinaire ultérieur ; remplacement d'un téléchargement automatique en attente et transmission de `force=true` même si le cache devient récent. Ces tests ne constituent pas une recette sur lanceur réel.
 
 Avant fusion, vérifier les résultats de `testDebugUnitTest`, `lintDebug`, `assembleDebug`, `assembleDebugAndroidTest` et `bundleRelease` dans la CI existante. Puis tester sur téléphone :
 
