@@ -2,7 +2,7 @@
 
 Date : 11 novembre 2026. Branche de cadrage : `codex/ux-etats-libelles`.
 
-**Statut : étape 1 définie, interface non modifiée.** Ce document fixe le contrat cible des prochaines étapes : fraîcheur simplifiée, recherche avec choix du résultat et actions explicites. Les textes entre guillemets sont les libellés retenus pour cette implémentation future ; ils ne décrivent pas tous l'interface déjà livrée.
+**Statut : cadrage défini ; étape 2 (fraîcheur) implémentée sur la branche, recette appareil à effectuer.** L'écran principal affiche désormais un âge court, un avertissement pour les observations anciennes et un bouton accessible « Détails des données » ouvrant les dates des conditions et du téléchargement dans le fuseau de la ville. Les dates détaillées conservent leur formulation existante. L'affichage est recalculé chaque minute au premier plan et au retour à l'écran. Les autres sections restent le contrat cible des prochaines étapes, notamment la recherche avec choix du résultat ; elles ne décrivent pas toutes l'interface déjà livrée.
 
 ## 1. Principes de lecture
 
@@ -125,6 +125,6 @@ Horloge de référence : `2026-11-11T12:00:00Z`. Les exemples sont des données 
 | Réponse tardive | Recherche A suspendue, nouvelle saisie ou sélection B, puis fin de A | R07 pour A ; B et sa saisie restent intacts |
 | Annulation / choix de résultat | Recherche suspendue annulée ; résultats puis choix explicite | R07 sans erreur ; R08 seulement après choix, sans ajout automatique du premier résultat |
 
-Cette étape ne crée ni ressources Android, ni nouveau modèle d'état, ni tests exécutables. À l'implémentation, traduire ces règles en états typés plutôt qu'en reconnaissance du texte de `notice` ; `WeatherUiState` et `SearchState` actuels ne portent pas encore toute cette distinction. Externaliser les libellés dans les ressources et tester les transitions avant la recette petit écran, police 200 %, rotation et TalkBack.
+Le cadrage initial ne modifiait pas l'application. L'étape fraîcheur ajoute des ressources Android, des tests unitaires de présentation et un test instrumenté d'ouverture des détails. Pour les étapes restantes, traduire les règles en états typés plutôt qu'en reconnaissance du texte de `notice` ; `WeatherUiState` et `SearchState` actuels ne portent pas encore toute cette distinction. La recette petit écran, police 200 %, rotation et TalkBack reste à effectuer sur appareil.
 
 Références locales : [fraîcheur](../app/src/main/java/com/valerie/meteoquote/data/WeatherFreshness.kt), [cache](../app/src/main/java/com/valerie/meteoquote/data/CachePolicy.kt), [erreurs](../app/src/main/java/com/valerie/meteoquote/ui/WeatherFailure.kt), [états du ViewModel](../app/src/main/java/com/valerie/meteoquote/ui/WeatherViewModel.kt), [roadmap](CAHIER_DES_CHARGES_ROADMAP.md).
