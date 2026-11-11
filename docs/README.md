@@ -19,6 +19,7 @@ Relecture du 8 novembre 2026, sur le code de la branche `codex/search-viewmodel`
 
 ## Suivi des travaux
 
+- [Lot UX 1 — États et libellés](UX_LOT_1_ETATS_LIBELLES.md) : cadrage du 11 novembre 2026, avant modification de l'interface ; états météo/recherche, textes retenus, priorités et cas de recette.
 - [Roadmap](CAHIER_DES_CHARGES_ROADMAP.md) : distingue désormais les fonctions implémentées des évolutions proposées. Les estimations initiales ne sont pas un reste à faire.
 - [Revue du 2 novembre](REVUE_CODE_2026-11-02.md) : recherche tardive et file de rendu corrigées ; fraîcheur de la météo utilisée pour la citation à minuit encore à corriger. Les optimisations de rendu et de décodage restent proposées.
 

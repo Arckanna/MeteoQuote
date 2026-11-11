@@ -150,7 +150,7 @@
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:accessibilityLiveRegion="polite" />
+            android:accessibilityLiveRegion="none" />
           <Button
             android:id="@+id/btnRefresh"
             style="@style/ActionIcon"
@@ -160,6 +160,15 @@
             app:icon="@drawable/ic_refresh" />
         </LinearLayout>
       </LinearLayout>
+      <Button
+        android:id="@+id/btnWeatherDetails"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:text="@string/weather_data_details"
+        android:contentDescription="@string/weather_data_details_accessibility"
+        android:visibility="gone" />
       <com.valerie.meteoquote.ui.MetricLayout
         android:id="@+id/containerChips"
         android:layout_width="match_parent"

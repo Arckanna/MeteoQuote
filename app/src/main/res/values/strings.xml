@@ -25,4 +25,19 @@
     <string name="quote_mood">À l’humeur du ciel</string>
     <string name="quote_mark">“</string>
     <string name="feedback">Envoyer un retour</string>
+    <string name="weather_data_details">Détails des données</string>
+    <string name="weather_data_dates">Dates des données</string>
+    <string name="weather_data_details_accessibility">Détails des données : afficher les heures des conditions et du téléchargement</string>
+    <string name="weather_data_close">Fermer</string>
+    <string name="weather_data_old">Données anciennes</string>
+    <string name="weather_data_unknown">Fraîcheur inconnue</string>
+    <string name="weather_download_unknown">Heure du téléchargement indisponible</string>
+    <string name="weather_updated_now">Actualisé à l’instant</string>
+    <string name="weather_updated_minutes">Actualisé il y a %1$d min</string>
+    <string name="weather_updated_hours">Actualisé il y a %1$d h</string>
+    <string name="weather_updated_days">Actualisé il y a %1$d j</string>
+    <string name="weather_observed_minutes">Conditions relevées il y a %1$d min</string>
+    <string name="weather_observed_hours">Conditions relevées il y a %1$d h</string>
+    <string name="weather_observed_days">Conditions relevées il y a %1$d j</string>
+    <string name="weather_refreshing">Actualisation en cours…</string>
 </resources>

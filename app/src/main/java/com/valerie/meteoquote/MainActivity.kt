@@ -208,6 +208,7 @@ class MainActivity : AppCompatActivity() {
                     while (true) {
                         viewModel.refreshDailyQuote()
                         viewModel.refreshVisibleWeather()
+                        renderFreshness(viewModel.uiState.value, java.time.Instant.now())
                         kotlinx.coroutines.delay(60_000)
                     }
                 }
@@ -233,6 +234,29 @@ class MainActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
     }
 
+    private fun renderFreshness(state: com.valerie.meteoquote.ui.WeatherUiState, now: java.time.Instant) {
+        val hasWeather = state.currentTemp != null && !state.isLoading && state.error == null
+        findViewById<TextView>(R.id.tvCurrentWeatherTitle).text =
+            if (hasWeather) com.valerie.meteoquote.data.WeatherFreshness.title(state.observedAt, state.updatedAt, now)
+            else getString(R.string.current_weather)
+        findViewById<TextView>(R.id.tvUpdated).text = listOfNotNull(
+            if (hasWeather) com.valerie.meteoquote.ui.WeatherFreshnessText.summary(
+                this, state.observedAt, state.updatedAt, now) else null,
+            getString(R.string.weather_refreshing).takeIf { state.isRefreshing && hasWeather },
+            state.notice).joinToString("\n")
+        findViewById<Button>(R.id.btnWeatherDetails).apply {
+            visibility = if (hasWeather) View.VISIBLE else View.GONE
+            setOnClickListener {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle(R.string.weather_data_dates)
+                    .setMessage(com.valerie.meteoquote.data.WeatherFreshness.label(
+                        state.observedAt, state.updatedAt, state.zoneId, java.time.Instant.now()).replace(" · ", "\n\n"))
+                    .setPositiveButton(R.string.weather_data_close, null)
+                    .show()
+            }
+        }
+    }
+
     private fun updateUI(state: com.valerie.meteoquote.ui.WeatherUiState) {
         val labels = state.cities.map { it.label }
         if ((0 until cityNamesAdapter.count).map { cityNamesAdapter.getItem(it) } != labels) {
@@ -251,14 +275,7 @@ class MainActivity : AppCompatActivity() {
             isEnabled = !state.isLoading && !state.isRefreshing
         }
         val now = java.time.Instant.now()
-        findViewById<TextView>(R.id.tvCurrentWeatherTitle).text =
-            if (state.currentTemp == null) getString(R.string.current_weather)
-            else com.valerie.meteoquote.data.WeatherFreshness.title(state.observedAt, state.updatedAt, now)
-        findViewById<TextView>(R.id.tvUpdated).text = listOfNotNull(
-            if (state.currentTemp != null) com.valerie.meteoquote.data.WeatherFreshness.label(
-                state.observedAt, state.updatedAt, state.zoneId, now) else null,
-            "Mise à jour…".takeIf { state.isRefreshing && state.currentTemp != null },
-            state.notice).joinToString(" · ")
+        renderFreshness(state, now)
         // Gestion du chargement
         if (state.isLoading) {
             containerHourly.removeAllViews()
