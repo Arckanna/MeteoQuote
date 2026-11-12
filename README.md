@@ -14,7 +14,7 @@ Capture de la version 7.4 sur émulateur Android, réalisée le 5 novembre 2026.
 
 - Température et conditions, prévisions sur **24 h** et jusqu’à **7 jours à partir de demain**, selon les données disponibles et le fuseau de la ville.
 - **Indices UV et qualité de l’air (AQI européen)**, avec pics de la journée. L’AQI est facultatif : son indisponibilité ne masque pas la météo.
-- Recherche de villes via Open-Meteo Geocoding, villes enregistrées et liste des récents. **Ma position** utilise une permission de localisation approximative facultative ; la recherche manuelle fonctionne sans cette permission.
+- Recherche via Open-Meteo Geocoding : jusqu'à cinq villes avec région et pays, ajout après choix explicite, chargement annulable et saisie conservée en cas d'erreur. Villes enregistrées et liste des récents. **Ma position** utilise une permission de localisation approximative facultative ; la recherche manuelle fonctionne sans cette permission.
 - **Citation quotidienne** conservée selon la date locale du téléphone, commune à l’application et au widget et stable lors des changements de ville.
 - **Consultation hors ligne** après un premier chargement, avec dates des données et indication des conditions anciennes.
 - **Widget redimensionnable** affichant la ville sélectionnée dans l’application, la météo, la citation et une action d’actualisation.
