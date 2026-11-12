@@ -2,7 +2,7 @@
 
 Date : 11 novembre 2026. Branche de cadrage : `codex/ux-etats-libelles`.
 
-**Statut : cadrage défini ; étape 2 (fraîcheur) implémentée sur la branche, recette appareil à effectuer.** L'écran principal affiche désormais un âge court, un avertissement pour les observations anciennes et un bouton accessible « Détails des données » ouvrant les dates des conditions et du téléchargement dans le fuseau de la ville. Les dates détaillées conservent leur formulation existante. L'affichage est recalculé chaque minute au premier plan et au retour à l'écran. Les autres sections restent le contrat cible des prochaines étapes, notamment la recherche avec choix du résultat ; elles ne décrivent pas toutes l'interface déjà livrée.
+**Statut : cadrage défini ; étape 2 (fraîcheur) implémentée sur la branche, recette appareil à effectuer.** L'écran principal affiche désormais un âge court, un avertissement pour les observations anciennes et un bouton accessible « Détails des données » ouvrant les dates des conditions et du téléchargement dans le fuseau de la ville. Les dates détaillées conservent leur formulation existante. L'affichage est recalculé chaque minute au premier plan et au retour à l'écran. Les autres sections restent le contrat cible des prochaines étapes, hors fraîcheur et recherche multirésultat désormais implémentées ; elles ne décrivent pas toutes l'interface déjà livrée.
 
 ## 1. Principes de lecture
 
@@ -79,7 +79,7 @@ Les durées sont calculées entre instants ; les dates détaillées suivent le f
 
 ## 5. États de recherche et textes exacts
 
-Cette table fixe aussi les états attendus pour la future recherche multirésultat. Aujourd'hui, le repository ne retourne qu'une ville et le succès la sélectionne immédiatement.
+Implémentation du 12 novembre 2026 : jusqu'à cinq lieux distincts, avec région et pays lorsque le service les fournit, chargement annulable et choix explicite avant ajout/sélection. Les erreurs restent près du champ et conservent la saisie. Les réponses et les choix sont associés à une génération d'intention : modification de saisie, annulation, sélection manuelle et localisation invalident les anciens résultats. R06 reste une cible ; sans détection fiable du mode hors ligne, les erreurs de connexion utilisent R05.
 
 | ID | Situation | Message / libellé | Actions et conservation |
 |---|---|---|---|

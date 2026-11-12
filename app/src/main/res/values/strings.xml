@@ -40,4 +40,12 @@
     <string name="weather_observed_hours">Conditions relevées il y a %1$d h</string>
     <string name="weather_observed_days">Conditions relevées il y a %1$d j</string>
     <string name="weather_refreshing">Actualisation en cours…</string>
+    <string name="city_search_action">Rechercher</string>
+    <string name="city_search_loading">Recherche en cours…</string>
+    <string name="city_search_cancel">Annuler</string>
+    <string name="city_search_choose">Choisissez une ville</string>
+    <string name="city_search_empty">Saisissez un nom de ville.</string>
+    <string name="city_search_no_results">Aucune ville trouvée pour « %1$s ». Vérifiez le nom ou précisez la région.</string>
+    <string name="city_search_error">Impossible de rechercher une ville pour le moment. Réessayez.</string>
+    <string name="city_search_selected">Ville sélectionnée : %1$s.</string>
 </resources>

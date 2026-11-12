@@ -200,6 +200,7 @@ class MainActivity : AppCompatActivity() {
         etCitySearch.setText(viewModel.searchState.value.query)
         etCitySearch.doAfterTextChanged { viewModel.updateSearchQuery(it.toString()) }
         findViewById<Button>(R.id.btnAddCity).setOnClickListener { viewModel.searchCity() }
+        findViewById<Button>(R.id.btnCancelSearch).setOnClickListener { viewModel.cancelSearch() }
     }
     private fun observeViewModel() {
         lifecycleScope.launch {
@@ -217,9 +218,34 @@ class MainActivity : AppCompatActivity() {
                         val input = findViewById<EditText>(R.id.etCitySearch)
                         if (input.text.toString() != state.query) input.setText(state.query)
                         findViewById<Button>(R.id.btnAddCity).isEnabled = !state.isSearching
-                        state.addedCity?.let { addToRecents(it) }
-                        state.message?.let {
-                            Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
+                        findViewById<View>(R.id.searchProgress).visibility = if (state.isSearching) View.VISIBLE else View.GONE
+                        findViewById<View>(R.id.btnCancelSearch).visibility =
+                            if (state.isSearching || state.results.isNotEmpty()) View.VISIBLE else View.GONE
+                        findViewById<TextView>(R.id.searchStatus).apply {
+                            text = when {
+                                state.isSearching -> getString(R.string.city_search_loading)
+                                state.results.isNotEmpty() -> getString(R.string.city_search_choose)
+                                else -> state.message.orEmpty()
+                            }
+                            visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
+                        }
+                        findViewById<LinearLayout>(R.id.searchResults).apply {
+                            removeAllViews()
+                            visibility = if (state.results.isEmpty()) View.GONE else View.VISIBLE
+                            state.results.forEach { city ->
+                                addView(com.google.android.material.button.MaterialButton(this@MainActivity).apply {
+                                    text = city.label
+                                    isAllCaps = false
+                                    gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+                                    minHeight = (48 * resources.displayMetrics.density).toInt()
+                                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                                    setOnClickListener { viewModel.chooseSearchResult(city, state.requestId) }
+                                })
+                            }
+                        }
+                        state.addedCity?.let {
+                            addToRecents(it)
+                            Toast.makeText(this@MainActivity, getString(R.string.city_search_selected, it.label), Toast.LENGTH_SHORT).show()
                             viewModel.consumeSearchMessage()
                         }
                     }

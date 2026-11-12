@@ -62,6 +62,8 @@ class WeatherViewModel @javax.inject.Inject constructor(
     data class SearchState(
         val query: String = "",
         val isSearching: Boolean = false,
+        val results: List<City> = emptyList(),
+        val requestId: Long = 0,
         val addedCity: City? = null,
         val message: String? = null
     )
@@ -73,7 +75,8 @@ class WeatherViewModel @javax.inject.Inject constructor(
         activeLocationRequest = null
         locationJob?.cancel()
         searchJob?.cancel()
-        _searchState.value = _searchState.value.copy(isSearching = false, addedCity = null, message = null)
+        _searchState.value = _searchState.value.copy(isSearching = false, results = emptyList(),
+            requestId = selectionIntent, addedCity = null, message = null)
         return selectionIntent
     }
 
@@ -87,32 +90,37 @@ class WeatherViewModel @javax.inject.Inject constructor(
         val query = _searchState.value.query.trim()
         val request = nextSelectionIntent()
         if (query.isEmpty()) {
-            _searchState.value = _searchState.value.copy(message = "Saisis un nom de ville")
+            _searchState.value = _searchState.value.copy(message = getApplication<Application>().getString(com.valerie.meteoquote.R.string.city_search_empty))
             return
         }
         _searchState.value = _searchState.value.copy(isSearching = true)
         searchJob = viewModelScope.launch {
             try {
-                val found = cityRepository.geocodeCity(query)
+                val found = cityRepository.searchCities(query).distinctBy { it.lat to it.lon }.take(5)
                 if (request != selectionIntent) return@launch
-                if (found == null) {
-                    _searchState.value = _searchState.value.copy(isSearching = false, message = "Ville introuvable")
-                } else {
-                    addCity(found)
-                    _searchState.value = SearchState(addedCity = found, message = "Ville ajoutée : ${found.label}")
-                }
+                _searchState.value = _searchState.value.copy(isSearching = false, results = found,
+                    message = if (found.isEmpty()) getApplication<Application>().getString(
+                        com.valerie.meteoquote.R.string.city_search_no_results, query) else null)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 if (request != selectionIntent) return@launch
                 _searchState.value = _searchState.value.copy(isSearching = false,
-                    message = "Impossible d'ajouter la ville. Réessayez.")
+                    message = getApplication<Application>().getString(com.valerie.meteoquote.R.string.city_search_error))
             }
         }
     }
 
+    fun cancelSearch() { nextSelectionIntent() }
+
+    fun chooseSearchResult(city: City, requestId: Long) {
+        if (requestId != selectionIntent || city !in _searchState.value.results) return
+        addCity(city)
+        _searchState.value = SearchState(addedCity = city, requestId = selectionIntent)
+    }
+
     fun consumeSearchMessage() {
-        _searchState.value = _searchState.value.copy(addedCity = null, message = null)
+        _searchState.value = _searchState.value.copy(addedCity = null)
     }
     private var displayedPlace: String? = null
     private var lastAttempt: java.time.Instant? = null
@@ -263,9 +271,9 @@ class WeatherViewModel @javax.inject.Inject constructor(
 
     fun addCity(city: City) {
         val currentCities = _uiState.value.cities.toMutableList()
-        val alreadyExists = currentCities.any { it.label.equals(city.label, ignoreCase = true) }
+        val alreadyExists = currentCities.any { it.lat == city.lat && it.lon == city.lon }
         if (alreadyExists) {
-            selectCity(currentCities.indexOfFirst { it.label.equals(city.label, ignoreCase = true) })
+            selectCity(currentCities.indexOfFirst { it.lat == city.lat && it.lon == city.lon })
         } else {
             currentCities.add(city)
             cityRepository.saveCities(currentCities)

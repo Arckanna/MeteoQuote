@@ -58,8 +58,8 @@
             style="@style/ActionIcon"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:contentDescription="@string/add_city"
-            app:icon="@drawable/ic_add" />
+            android:contentDescription="@string/city_search_action"
+            app:icon="@android:drawable/ic_menu_search" />
           <Button
             android:id="@+id/btnLocate"
             style="@style/ActionIcon"
@@ -77,6 +77,32 @@
             app:iconTint="@color/destructive_tint" />
         </LinearLayout>
       </com.valerie.meteoquote.ui.SearchActionsRow>
+      <ProgressBar
+        android:id="@+id/searchProgress"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+      <TextView
+        android:id="@+id/searchStatus"
+        style="@style/TextBody"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:visibility="gone" />
+      <LinearLayout
+        android:id="@+id/searchResults"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone" />
+      <Button
+        android:id="@+id/btnCancelSearch"
+        style="@style/ActionSecondary"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/city_search_cancel"
+        android:visibility="gone" />
       <HorizontalScrollView
         android:id="@+id/recentChipsScroll"
         android:layout_width="match_parent"
