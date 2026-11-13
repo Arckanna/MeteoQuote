@@ -282,23 +282,34 @@ class WeatherViewModel @javax.inject.Inject constructor(
         }
     }
 
-    fun removeCity(index: Int) {
-        nextSelectionIntent()
+    fun selectSavedCity(city: City) {
+        val index = _uiState.value.cities.indexOfFirst { it.lat == city.lat && it.lon == city.lon }
+        if (index >= 0) selectCity(index)
+    }
+
+    /** Resolve the confirmed identity against the current list, never a captured list position. */
+    fun removeCity(city: City): Boolean {
         val currentCities = _uiState.value.cities.toMutableList()
-        if (index in currentCities.indices && currentCities.size > 1) {
+        val index = currentCities.indexOfFirst { it.lat == city.lat && it.lon == city.lon }
+        if (index >= 0 && currentCities.size > 1) {
+            nextSelectionIntent()
+            val selected = currentCities.getOrNull(_uiState.value.selectedCityIndex)
             currentCities.removeAt(index)
             cityRepository.saveCities(currentCities)
-            val newIndex = if (index >= currentCities.size) currentCities.size - 1 else index.coerceAtLeast(0)
+            val retainedIndex = currentCities.indexOfFirst { it.lat == selected?.lat && it.lon == selected.lon }
+            val newIndex = if (retainedIndex >= 0) retainedIndex else index.coerceAtMost(currentCities.lastIndex)
             _uiState.value = _uiState.value.copy(
                 cities = currentCities,
                 selectedCityIndex = newIndex
             )
             cityRepository.saveSelectedIndex(newIndex)
             updateWidgets()
-            if (currentCities.isNotEmpty()) {
+            if (retainedIndex < 0) {
                 refreshWeather(currentCities[newIndex])
             }
+            return true
         }
+        return false
     }
 
     /** Called only while the screen is visible, also after returning from the background. */

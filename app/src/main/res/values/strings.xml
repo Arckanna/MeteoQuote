@@ -48,4 +48,14 @@
     <string name="city_search_no_results">Aucune ville trouvée pour « %1$s ». Vérifiez le nom ou précisez la région.</string>
     <string name="city_search_error">Impossible de rechercher une ville pour le moment. Réessayez.</string>
     <string name="city_search_selected">Ville sélectionnée : %1$s.</string>
+    <string name="city_my_position">Ma position</string>
+    <string name="city_manage">Gérer mes villes</string>
+    <string name="city_remove">Supprimer</string>
+    <string name="city_remove_title">Supprimer la ville</string>
+    <string name="city_remove_confirm">Voulez-vous supprimer « %1$s » ?</string>
+    <string name="city_remove_accessibility">Supprimer %1$s</string>
+    <string name="city_show_accessibility">Afficher la météo de %1$s</string>
+    <string name="city_keep_one">Conservez au moins une ville enregistrée.</string>
+    <string name="city_removed">Ville supprimée.</string>
+    <string name="city_remove_unavailable">Suppression impossible : cette ville est absente ou est la dernière ville enregistrée.</string>
 </resources>

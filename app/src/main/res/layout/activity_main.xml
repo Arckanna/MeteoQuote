@@ -60,23 +60,25 @@
             android:layout_height="48dp"
             android:contentDescription="@string/city_search_action"
             app:icon="@android:drawable/ic_menu_search" />
-          <Button
-            android:id="@+id/btnLocate"
-            style="@style/ActionIcon"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/use_location"
-            app:icon="@drawable/sharp_my_location_24" />
-          <Button
-            android:id="@+id/btnDeleteCity"
-            style="@style/ActionIcon"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/delete_city"
-            app:icon="@drawable/ic_delete"
-            app:iconTint="@color/destructive_tint" />
         </LinearLayout>
       </com.valerie.meteoquote.ui.SearchActionsRow>
+      <Button
+        android:id="@+id/btnLocate"
+        style="@style/ActionSecondary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:text="@string/city_my_position"
+        android:contentDescription="@string/city_my_position"
+        app:icon="@drawable/sharp_my_location_24" />
+      <Button
+        android:id="@+id/btnManageCities"
+        style="@style/ActionSecondary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:text="@string/city_manage"
+        android:contentDescription="@string/city_manage" />
       <ProgressBar
         android:id="@+id/searchProgress"
         android:layout_width="32dp"
