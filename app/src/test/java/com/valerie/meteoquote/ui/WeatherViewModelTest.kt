@@ -268,6 +268,42 @@ class WeatherViewModelTest {
         assertEquals("Lyon", vm.searchState.value.results.single().label)
     }
 
+    @Test fun confirmedRemovalUsesIdentityAfterListPositionsChange() = runTest(testDispatcher) {
+        val a = City("Même nom", 43.0, 1.0)
+        val b = City("Même nom", 45.0, 4.0)
+        val c = City("Paris", 48.0, 2.0)
+        every { mockCityRepository.loadCities() } returns listOf(a, b, c)
+        val vm = createViewModel()
+        vm.selectCity(2)
+        assertTrue(vm.removeCity(a)) // b is now at index 0, c at index 1.
+        assertTrue(vm.removeCity(b.copy(label = "Libellé ancien")))
+        assertEquals(listOf(c), vm.uiState.value.cities)
+        assertEquals(c, vm.uiState.value.cities[vm.uiState.value.selectedCityIndex])
+        assertFalse(vm.removeCity(b)) // A second confirmation cannot delete c.
+        assertFalse(vm.removeCity(c)) // Keep at least one city.
+    }
+
+    @Test fun removalInvalidatesLateSearchWithoutDeletingAnotherCity() = runTest(testDispatcher) {
+        val a = City("Toulouse", 43.0, 1.0)
+        val b = City("Lyon", 45.0, 4.0)
+        every { mockCityRepository.loadCities() } returns listOf(a, b)
+        val response = kotlinx.coroutines.CompletableDeferred<List<City>>()
+        coEvery { mockCityRepository.searchCities(any()) } coAnswers {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { response.await() }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        assertTrue(vm.removeCity(a))
+        response.complete(listOf(City("Paris", 48.0, 2.0)))
+        advanceUntilIdle()
+        assertEquals(listOf(b), vm.uiState.value.cities)
+        assertEquals(0, vm.uiState.value.selectedCityIndex)
+        assertTrue(vm.searchState.value.results.isEmpty())
+        assertEquals("Paris", vm.searchState.value.query)
+    }
+
     private fun createViewModel(): WeatherViewModel {
         return WeatherViewModel(
             application,

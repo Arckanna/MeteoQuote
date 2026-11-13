@@ -97,7 +97,7 @@ class UiLayoutTest {
                 val iconLeft = daily.getChildAt(0).findViewById<View>(R.id.dayIcon).left
                 for (index in 0 until daily.childCount) assertEquals(iconLeft, daily.getChildAt(index).findViewById<View>(R.id.dayIcon).left)
                 assertEquals(24, activity.findViewById<LinearLayout>(R.id.containerHourly).childCount)
-                for (id in listOf(R.id.btnAddCity, R.id.btnLocate, R.id.btnDeleteCity, R.id.btnRefresh)) {
+                for (id in listOf(R.id.btnAddCity, R.id.btnLocate, R.id.btnManageCities, R.id.btnRefresh)) {
                     val button = activity.findViewById<View>(id)
                     assertTrue(button.width >= 48 * activity.resources.displayMetrics.density - 1)
                     assertFalse(button.contentDescription.isNullOrBlank())

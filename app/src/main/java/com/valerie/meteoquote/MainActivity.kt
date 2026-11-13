@@ -170,23 +170,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btnFeedback)?.setOnClickListener { openFeedbackForm() }
 
-        findViewById<Button>(R.id.btnDeleteCity)?.setOnClickListener {
-            val currentIndex = viewModel.uiState.value.selectedCityIndex
-            val cities = viewModel.uiState.value.cities
-            if (cities.size > 1) {
-                AlertDialog.Builder(this)
-                    .setTitle("Supprimer la ville")
-                    .setMessage("Voulez-vous supprimer « ${cities[currentIndex].label} » ?")
-                    .setPositiveButton("Supprimer") { _, _ ->
-                        viewModel.removeCity(currentIndex)
-                        Toast.makeText(this, "Ville supprimée", Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton("Annuler", null)
-                    .show()
-            } else {
-                Toast.makeText(this, "Impossible de supprimer : il doit rester au moins une ville", Toast.LENGTH_SHORT).show()
-            }
-        }
+        findViewById<Button>(R.id.btnManageCities).setOnClickListener { showCityManager() }
 
         findViewById<Button>(R.id.btnLocate)?.setOnClickListener {
             val request = viewModel.beginLocationRequest()
@@ -202,6 +186,55 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnAddCity).setOnClickListener { viewModel.searchCity() }
         findViewById<Button>(R.id.btnCancelSearch).setOnClickListener { viewModel.cancelSearch() }
     }
+    private fun showCityManager() {
+        val cities = viewModel.uiState.value.cities.toList()
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val padding = (16 * resources.displayMetrics.density).toInt()
+            setPadding(padding, padding, padding, padding)
+        }
+        val scroll = android.widget.ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.city_manage)
+            .setView(scroll)
+            .setNegativeButton(R.string.weather_data_close, null)
+            .create()
+        if (cities.size == 1) content.addView(TextView(this).apply { setText(R.string.city_keep_one) })
+        cities.forEach { city ->
+            fun action(label: String, description: String, onClick: () -> Unit) =
+                com.google.android.material.button.MaterialButton(this).apply {
+                    text = label
+                    contentDescription = description
+                    isAllCaps = false
+                    minHeight = (48 * resources.displayMetrics.density).toInt()
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    setOnClickListener { onClick() }
+                }
+            content.addView(action(city.label, getString(R.string.city_show_accessibility, city.label)) {
+                viewModel.selectSavedCity(city)
+                dialog.dismiss()
+            })
+            content.addView(action(getString(R.string.city_remove), getString(R.string.city_remove_accessibility, city.label)) {
+                dialog.dismiss()
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.city_remove_title)
+                    .setMessage(getString(R.string.city_remove_confirm, city.label))
+                    .setPositiveButton(R.string.city_remove) { _, _ ->
+                        val removed = viewModel.removeCity(city)
+                        if (removed) {
+                            recentCities.removeAll { it.lat == city.lat && it.lon == city.lon }
+                            saveRecentCities()
+                            updateRecentChips()
+                        }
+                        Toast.makeText(this, if (removed) R.string.city_removed else R.string.city_remove_unavailable, Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton(R.string.city_search_cancel, null)
+                    .show()
+            }.apply { isEnabled = cities.size > 1 })
+        }
+        dialog.show()
+    }
+
     private fun observeViewModel() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -291,8 +324,8 @@ class MainActivity : AppCompatActivity() {
         }
         spinner.contentDescription = "Ville sélectionnée : " + labels.getOrNull(state.selectedCityIndex).orEmpty()
         if (spinner.selectedItemPosition != state.selectedCityIndex) spinner.setSelection(state.selectedCityIndex)
-        // Activer/désactiver le bouton de suppression selon le nombre de villes
-        findViewById<Button>(R.id.btnDeleteCity)?.isEnabled = state.cities.size > 1
+
+
 
         findViewById<Button>(R.id.btnRefresh).isEnabled = !state.isLoading && !state.isRefreshing
         findViewById<Button>(R.id.btnRefresh).visibility = if (state.error == null && state.notice == null) View.VISIBLE else View.GONE

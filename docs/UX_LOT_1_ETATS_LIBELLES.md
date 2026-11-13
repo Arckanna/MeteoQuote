@@ -98,6 +98,8 @@ La recherche peut afficher R02–R06 pendant que la météo reste en M01–M03. 
 
 ## 6. Priorités de présentation
 
+Gestion des villes implémentée le 13 novembre 2026 : libellé visible « Ma position », dialogue « Gérer mes villes » avec liste défilante et choix de ville, suppression avec confirmation nominative. La cible est résolue par coordonnées dans la liste courante ; une confirmation périmée ne supprime aucun autre lieu. La dernière ville ne peut pas être supprimée. Supprimer une ville non sélectionnée conserve la sélection courante ; supprimer la ville sélectionnée choisit une voisine. Les réponses de recherche et localisation antérieures sont invalidées après suppression. Les actions principales occupent chacune une ligne avec hauteur adaptable.
+
 1. Identifier la ville sélectionnée et vérifier si des données de cette ville sont utilisables ; ne jamais réutiliser silencieusement celles d'un autre lieu.
 2. Avec données, choisir M01/M02/M03 selon l'observation, puis ajouter l'opération M05, l'absence de réseau M06 ou l'échec M08. Un échec ne supprime pas le statut ancien/incertain.
 3. Sans données, afficher M04 pendant l'attente, puis M07 ou M09 si elle échoue. Cache expiré et cache absent suivent ce même parcours, mais des dates expirées ne sont pas affichées comme des mesures disponibles.

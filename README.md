@@ -25,6 +25,8 @@ Capture de la version 7.4 sur émulateur Android, réalisée le 5 novembre 2026.
 
 La recherche est pilotée par le ViewModel. Une nouvelle saisie, une sélection manuelle ou une demande de localisation invalide les résultats précédents : une réponse tardive ne remplace pas le dernier choix et n’efface pas une nouvelle saisie.
 
+Les boutons visibles **Ma position** et **Gérer mes villes** donnent accès à la localisation et aux villes enregistrées. Le dialogue de gestion permet de choisir une ville ou de la supprimer après confirmation. La suppression vise ses coordonnées, jamais sa position dans la liste, et conserve au moins une ville. Ses actions sont empilées et la liste peut défiler.
+
 Le cache météo Room est conservé par lieu : fraîcheur de récupération de **30 minutes**, indicateur de cache ancien à partir de **24 heures**, expiration à **7 jours**. L’heure des conditions fournies reste distincte de l’heure de téléchargement : le titre « Météo actuelle » exige des conditions datées de moins d’une heure et des dates cohérentes. Le cache AQI est indépendant.
 
 Les rendus du widget sont mis en file pour conserver les demandes reçues pendant une mise à jour. Un rendu demandé par l’application lit uniquement le cache, même sans réseau. Les téléchargements sont séparés par lieu : les demandes automatiques partagent le travail en attente et revérifient la fraîcheur à l’exécution ; une demande forcée est prioritaire. Les échecs automatiques météo et AQI déclenchent une temporisation indépendante par lieu, de 1 à 15 minutes.
