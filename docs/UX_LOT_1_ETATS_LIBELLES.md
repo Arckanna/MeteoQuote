@@ -108,6 +108,8 @@ Gestion des villes implémentée le 13 novembre 2026 : libellé visible « Ma po
 
 ## 7. Cas de recette à préparer pour l'implémentation
 
+La [recette du 14 novembre](RECETTE_LOT_UX_1.md) consigne les vérifications du lot et les essais à refaire sur appareil. Les actions principales partagent une ligne lorsque leurs libellés tiennent entièrement ; elles s'empilent sur les petites largeurs ou avec de grandes polices.
+
 Horloge de référence : `2026-11-11T12:00:00Z`. Les exemples sont des données de test, pas des observations réelles. Chaque cas devra contrôler le texte, les actions et la conservation des données, au retour au premier plan comme pendant l'affichage.
 
 | Cas | Préparation | Attendu |

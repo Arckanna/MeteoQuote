@@ -70,20 +70,21 @@ class WeatherViewModel @javax.inject.Inject constructor(
     private val _searchState = MutableStateFlow(SearchState())
     val searchState: StateFlow<SearchState> = _searchState.asStateFlow()
 
-    private fun nextSelectionIntent(): Long {
+    private fun nextSelectionIntent(query: String = _searchState.value.query): Long {
         selectionIntent++
         activeLocationRequest = null
         locationJob?.cancel()
         searchJob?.cancel()
-        _searchState.value = _searchState.value.copy(isSearching = false, results = emptyList(),
+        _searchState.value = _searchState.value.copy(query = query, isSearching = false, results = emptyList(),
             requestId = selectionIntent, addedCity = null, message = null)
         return selectionIntent
     }
 
     fun updateSearchQuery(query: String) {
         if (query == _searchState.value.query) return
-        nextSelectionIntent()
-        _searchState.value = _searchState.value.copy(query = query)
+        // Publish the new draft and invalidate results atomically: never echo the old draft
+        // back into EditText between two key events.
+        nextSelectionIntent(query)
     }
 
     fun searchCity() {
