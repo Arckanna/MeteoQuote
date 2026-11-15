@@ -109,6 +109,33 @@ class WidgetHostTest {
             }
             assertTrue("Manual refresh must still enqueue work",
                 workManager.getWorkInfosByTag("widget-$id").get().any { it.id !in beforeRefresh })
+            val repository = com.valerie.meteoquote.data.AndroidCityRepository(context)
+            val savedCities = repository.loadCities().ifEmpty { repository.defaultCities }
+            val savedIndex = repository.selectedIndex(savedCities.size)
+            try {
+                androidx.test.core.app.ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                    scenario.onActivity { activity ->
+                        val model = MainActivity::class.java.getDeclaredField("viewModel").apply { isAccessible = true }
+                            .get(activity) as com.valerie.meteoquote.ui.WeatherViewModel
+                        model.addCity(com.valerie.meteoquote.data.model.City("Recette widget A", 0.12345, 0.54321))
+                        model.addCity(com.valerie.meteoquote.data.model.City("Recette widget B", 0.23456, 0.65432))
+                    }
+                    val syncDeadline = SystemClock.elapsedRealtime() + 20_000
+                    var selected = ""
+                    while (SystemClock.elapsedRealtime() < syncDeadline && selected != "Recette widget B") {
+                        instrumentation.runOnMainSync {
+                            selected = hostView?.findViewById<TextView>(R.id.widget_city)?.text?.toString().orEmpty()
+                        }
+                        SystemClock.sleep(100)
+                    }
+                    assertEquals("Widget must render the final app selection even without cached weather", "Recette widget B", selected)
+                }
+            } finally {
+                repository.saveCities(savedCities)
+                repository.saveSelectedIndex(savedIndex)
+                context.sendBroadcast(android.content.Intent(com.valerie.meteoquote.widget.WidgetViews.ACTION_RENDER)
+                    .setComponent(ComponentName(context, WeatherWidgetProvider::class.java)))
+            }
         } finally {
             host.stopListening()
             host.deleteAppWidgetId(id)

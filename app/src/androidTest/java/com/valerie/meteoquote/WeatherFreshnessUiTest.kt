@@ -37,11 +37,11 @@ class WeatherFreshnessUiTest {
                 assertTrue(details.contentDescription.contains("conditions et du téléchargement"))
                 details.performClick()
             }
-            onView(withText("Dates des données")).check(matches(isDisplayed()))
-            onView(withId(android.R.id.message)).check(matches(withText(org.hamcrest.Matchers.allOf(
+            onView(withText("Dates des données")).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog()).check(matches(isDisplayed()))
+            onView(withId(android.R.id.message)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog()).check(matches(withText(org.hamcrest.Matchers.allOf(
                 org.hamcrest.Matchers.containsString("Conditions du"),
                 org.hamcrest.Matchers.containsString("Téléchargées le")))))
-            onView(withText("Fermer")).perform(click())
+            onView(withText("Fermer")).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog()).perform(click())
         }
     }
 }

@@ -53,7 +53,7 @@ class UiLayoutTest {
                 if (activity.resources.configuration.fontScale <= 1f) {
                     val screenHeight = activity.resources.displayMetrics.heightPixels
                     val slightScroll = 96 * activity.resources.displayMetrics.density
-                    assertTrue("Quote must be identifiable within a short scroll",
+                    assertTrue("Quote must be identifiable within a short scroll: top=${quotePanel.top}, screen=$screenHeight",
                         quotePanel.top + 48 * activity.resources.displayMetrics.density < screenHeight + slightScroll)
                 }
                 capture(activity, root, "first-glance")
@@ -61,6 +61,10 @@ class UiLayoutTest {
                 for (background in listOf(0xFFFFF0D7, 0xFFE7EFF2, 0xFFEBEEEB, 0xFFE7F2F4, 0xFFEEEBF4, 0xFFE6EEF7, 0xFFF6F8F7)) {
                     assertTrue(androidx.core.graphics.ColorUtils.calculateContrast(0xFF52646B.toInt(), background.toInt()) >= 4.5)
                     assertTrue(androidx.core.graphics.ColorUtils.calculateContrast(0xFF203A43.toInt(), background.toInt()) >= 4.5)
+                }
+                if (activity.resources.configuration.fontScale >= 2f && activity.resources.configuration.screenWidthDp <= 360) {
+                    assertEquals("Large-font actions must stack using real Android font metrics", LinearLayout.VERTICAL,
+                        (activity.findViewById<View>(R.id.btnLocate).parent as com.valerie.meteoquote.ui.CityActionsRow).orientation)
                 }
                 val uv = activity.findViewById<ViewGroup>(R.id.uvCard)
                 val aqi = activity.findViewById<ViewGroup>(R.id.aqiCard)

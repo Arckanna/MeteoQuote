@@ -98,7 +98,7 @@ La recherche peut afficher R02–R06 pendant que la météo reste en M01–M03. 
 
 ## 6. Priorités de présentation
 
-Gestion des villes implémentée le 13 novembre 2026 : libellé visible « Ma position », dialogue « Gérer mes villes » avec liste défilante et choix de ville, suppression avec confirmation nominative. La cible est résolue par coordonnées dans la liste courante ; une confirmation périmée ne supprime aucun autre lieu. La dernière ville ne peut pas être supprimée. Supprimer une ville non sélectionnée conserve la sélection courante ; supprimer la ville sélectionnée choisit une voisine. Les réponses de recherche et localisation antérieures sont invalidées après suppression. Les actions principales occupent chacune une ligne avec hauteur adaptable.
+Gestion des villes implémentée le 13 novembre 2026 : libellé visible « Ma position », dialogue « Gérer mes villes » avec liste défilante et choix de ville, suppression avec confirmation nominative. La cible est résolue par coordonnées dans la liste courante ; une confirmation périmée ne supprime aucun autre lieu. La dernière ville ne peut pas être supprimée. Supprimer une ville non sélectionnée conserve la sélection courante ; supprimer la ville sélectionnée choisit une voisine. Les réponses de recherche et localisation antérieures sont invalidées après suppression. Les actions principales partagent une ligne si leurs libellés tiennent entièrement ; elles s'empilent sinon, avec une hauteur adaptable.
 
 1. Identifier la ville sélectionnée et vérifier si des données de cette ville sont utilisables ; ne jamais réutiliser silencieusement celles d'un autre lieu.
 2. Avec données, choisir M01/M02/M03 selon l'observation, puis ajouter l'opération M05, l'absence de réseau M06 ou l'échec M08. Un échec ne supprime pas le statut ancien/incertain.
@@ -107,6 +107,8 @@ Gestion des villes implémentée le 13 novembre 2026 : libellé visible « Ma po
 5. Une seule action « Actualiser » ou « Réessayer » sur la carte météo ; les actions de recherche gardent leur propre état. Aucun nouvel échec ne doit déplacer brutalement le focus ou ouvrir une boîte de dialogue automatiquement.
 
 ## 7. Cas de recette à préparer pour l'implémentation
+
+La [recette du 14 novembre](RECETTE_LOT_UX_1.md) consigne les vérifications du lot et les essais à refaire sur appareil. Les actions principales partagent une ligne lorsque leurs libellés tiennent entièrement ; elles s'empilent sur les petites largeurs ou avec de grandes polices.
 
 Horloge de référence : `2026-11-11T12:00:00Z`. Les exemples sont des données de test, pas des observations réelles. Chaque cas devra contrôler le texte, les actions et la conservation des données, au retour au premier plan comme pendant l'affichage.
 

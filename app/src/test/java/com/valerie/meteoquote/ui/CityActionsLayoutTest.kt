@@ -23,6 +23,11 @@ class CityActionsLayoutTest {
         val context = ContextThemeWrapper(base.createConfigurationContext(configuration), R.style.Theme_MeteoQuote)
         val root = LayoutInflater.from(context).inflate(R.layout.activity_main, null)
         val width = (288 * context.resources.displayMetrics.density).toInt()
+        val row = root.findViewById<TextView>(R.id.btnLocate).parent as CityActionsRow
+        row.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        row.layout(0, 0, row.measuredWidth, row.measuredHeight)
+        // Real font metrics and the stacking decision are checked on-device by UiLayoutTest.
         for ((id, label) in listOf(R.id.btnLocate to "Ma position", R.id.btnManageCities to "Gérer mes villes")) {
             val button = root.findViewById<TextView>(id)
             assertEquals(label, button.text.toString())
