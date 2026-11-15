@@ -8,7 +8,7 @@ Version déclarée dans le dépôt : **7.4** (`versionCode = 22`). Compatible à
 
 <img src="art/screenshot_main.png" alt="Écran d’accueil de Météo &amp; Citation : météo, indices UV et qualité de l’air, citation du jour" width="420"/>
 
-Capture de la version 7.4 sur émulateur Android, réalisée le 5 novembre 2026.
+Capture de la version de développement 7.4 avec le lot UX 1 sur émulateur Android, réalisée le 14 novembre 2026. [Recette et tests à effectuer sur téléphone](docs/RECETTE_LOT_UX_1.md).
 
 ## Fonctionnalités
 

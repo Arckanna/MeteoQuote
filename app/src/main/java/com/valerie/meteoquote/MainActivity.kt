@@ -248,8 +248,12 @@ class MainActivity : AppCompatActivity() {
                 }
                 launch {
                     viewModel.searchState.collect { state ->
+                        if (state != viewModel.searchState.value) return@collect
                         val input = findViewById<EditText>(R.id.etCitySearch)
-                        if (input.text.toString() != state.query) input.setText(state.query)
+                        // Typing already updates the ViewModel via the TextWatcher. Echoing
+                        // every emission here can overwrite a newer IME edit with an old draft.
+                        // Restore on creation; clear only after an explicit, still-current choice.
+                        if (state.addedCity != null && input.text.toString() != state.query) input.setText(state.query)
                         findViewById<Button>(R.id.btnAddCity).isEnabled = !state.isSearching
                         findViewById<View>(R.id.searchProgress).visibility = if (state.isSearching) View.VISIBLE else View.GONE
                         findViewById<View>(R.id.btnCancelSearch).visibility =

@@ -1,4 +1,4 @@
-# Recette du lot UX 1 — 14 novembre 2026
+# Recette du lot UX 1 — 14–15 novembre 2026
 
 Branche : `codex/ux-etats-libelles`. Cette recette porte sur la fraîcheur, la recherche multirésultat et la gestion des villes. Les résultats locaux ne certifient pas le comportement de tous les téléphones ni de tous les lanceurs Android.
 
@@ -31,4 +31,38 @@ Noter le modèle, la version Android, le lanceur, la version de TalkBack et la v
 
 ## Validation locale
 
-Résultats et limites de la recette sur émulateur consignés ci-dessous à la fin de l'exécution.
+Environnement : Windows, JDK 17, SDK Android 36, AVD `Medium_Phone_API_36.0`. Les données météo des captures sont celles reçues pendant les essais ; les tests de concurrence et de fraîcheur utilisent aussi des scénarios contrôlés.
+
+| Vérification | Résultat |
+|---|---|
+| `testDebugUnitTest` | 141 tests réussis, aucun échec. Dont réponses obsolètes, sélection explicite, suppression par identité, fraîcheur et ordonnancement du widget. |
+| `lintDebug` | Réussi : 0 erreur, 77 avertissements. Ce résultat ne signifie pas « aucun avertissement ». |
+| `assembleDebug`, `assembleRelease`, `assembleDebugAndroidTest` | Réussis. APK release non signé ; aucune publication effectuée. |
+| Recette instrumentée finale du 15 novembre | 14 tests réussis sur chacun des quatre profils : compact 320×640 dp, standard 411×891 dp, tablette 800×1280 dp, compact 320×640 dp avec police à 200 %. Soit 56 exécutions réussies, sans échec. Clavier, recréation, gestion/confirmation, détails, cache et widget inclus. |
+| Recherche réelle « Paris » au clavier | Cinq homonymes avec région/pays ; sélection conservée jusqu'au choix explicite de Paris en France. |
+| Rotation réelle portrait → paysage → portrait | Saisie « Paris » et résultats conservés, puis choix possible. |
+| Wi-Fi et données mobiles désactivés | Météo en cache conservée, message d'échec et Réessayer ; recherche « Lyon » en erreur sans effacer la saisie. Réseau restauré ensuite. |
+| Widget sans réseau | `WidgetHostTest` réussi : ajout dans un véritable hôte Android, actualisation, passage rapide A → B dans le ViewModel de l'activité, rendu final B y compris sans cache disponible initialement. |
+| TalkBack | Service activé et lié, exploration tactile active vérifiée ; parcours au clavier, ouverture/fermeture du dialogue de gestion vérifiés. Réglages restaurés. Prononciation, confort d'écoute et gestes tactiles complets restent à confirmer sur téléphone. |
+
+### Corrections issues de la recette
+
+- Les actions principales partagent une ligne uniquement si les deux libellés tiennent entièrement ; sinon elles s'empilent. Le test compact de visibilité de la citation conserve son seuil initial.
+- Le bouton des détails reprend le style des autres actions, sans capitales forcées.
+- Une frappe réelle avait révélé une réinjection transitoire de l'ancien brouillon : l'invalidation et le nouveau texte sont désormais publiés atomiquement par le ViewModel. L'activité ne recopie plus chaque émission dans le champ pendant la frappe ; elle restaure le texte à la création et le vide après un choix valide. Le test Android attend la connexion du clavier avant d'injecter les caractères, puis vérifie la conservation après recréation.
+- Le champ de ville demande au clavier de désactiver les suggestions automatiques. Le clavier anglais de l'émulateur substitue toutefois « Saint Martin » lors de certaines frappes synthétiques : ce comportement ne peut pas être garanti pour tous les claviers. Le test vérifie séparément la frappe réelle de « Paris » et la conservation d'un brouillon composé après recréation. Refaire les noms propres avec votre clavier fait partie de la recette physique.
+- Le test de dialogue cible explicitement la fenêtre du dialogue. L'empilement à 200 % est vérifié avec les polices réelles d'Android, plutôt qu'avec les métriques simulées de Robolectric.
+
+### Captures conservées
+
+- [Accueil actuel](../art/screenshot_main.png).
+- [Recherche avec cinq homonymes](../art/ux-lot-1/recherche.png).
+- [Résultats après rotation en paysage](../art/ux-lot-1/recherche-paysage.png).
+- [Petit écran et police 200 %](../art/ux-lot-1/police-200.png).
+- [Erreur de recherche sans réseau et météo en cache](../art/ux-lot-1/hors-ligne.png).
+
+Les rapports détaillés sont générés sous `app/build/reports/`, les sorties instrumentées sous `app/build/ui-review/` et les captures de manipulation sous `app/build/ux-validation/`. Ces dossiers ne sont pas versionnés et peuvent disparaître après nettoyage. Les captures ci-dessus restent dans `art/`.
+
+### Limites et suites
+
+L'hôte de test Android vérifie le fournisseur et les workers réels, mais ne remplace pas la recette sur le lanceur de votre téléphone, notamment après redimensionnement et restrictions de batterie. La détection dédiée du mode hors ligne reste hors de ce lot : une erreur réseau affiche un échec, sans inventer un statut de connectivité. Aucun test sur appareil physique n'a été effectué ici ; les cases de la checklist restent volontairement décochées.

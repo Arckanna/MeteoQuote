@@ -17,7 +17,22 @@ import org.junit.runner.RunWith
 class CityNavigationTest {
     @Test fun keyboardRotationAndIdentityBasedConfirmation() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            onView(withId(R.id.etCitySearch)).perform(scrollTo(), click(), replaceText(""), typeText("Saint Martin"), closeSoftKeyboard())
+            onView(withId(R.id.etCitySearch)).perform(scrollTo(), click(), replaceText(""))
+            onView(withId(R.id.etCitySearch)).perform(object : androidx.test.espresso.ViewAction {
+                override fun getConstraints() = isAssignableFrom(EditText::class.java)
+                override fun getDescription() = "Wait for the IME input connection before injecting key events"
+                override fun perform(controller: androidx.test.espresso.UiController, view: android.view.View) {
+                    val deadline = android.os.SystemClock.uptimeMillis() + 5_000
+                    while (androidx.core.view.ViewCompat.getRootWindowInsets(view)
+                            ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) != true &&
+                        android.os.SystemClock.uptimeMillis() < deadline) controller.loopMainThreadForAtLeast(100)
+                    controller.loopMainThreadForAtLeast(500)
+                }
+            }, typeTextIntoFocusedView("Paris"), closeSoftKeyboard())
+            onView(withId(R.id.etCitySearch)).check(matches(withText("Paris")))
+            // A multiword draft tests recreation independently of the emulator IME's
+            // English auto-correction of synthetic key events at word boundaries.
+            onView(withId(R.id.etCitySearch)).perform(replaceText("Saint Martin"), closeSoftKeyboard())
             scenario.recreate()
             onView(withId(R.id.etCitySearch)).check(matches(withText("Saint Martin")))
             val target = City("Ville de recette à supprimer", 12.345, 23.456)

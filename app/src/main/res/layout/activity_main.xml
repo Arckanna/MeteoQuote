@@ -44,7 +44,7 @@
           android:layout_height="wrap_content"
           android:minHeight="48dp"
           android:hint="@string/search_city"
-          android:inputType="textCapWords|textMultiLine"
+          android:inputType="textCapWords|textMultiLine|textNoSuggestions"
           android:importantForAutofill="no"
           android:scrollHorizontally="false"
           android:singleLine="false"
