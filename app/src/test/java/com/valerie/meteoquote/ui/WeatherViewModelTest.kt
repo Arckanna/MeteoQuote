@@ -693,7 +693,7 @@ class WeatherViewModelTest {
         coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.removeCity(0)
+        assertTrue(vm.removeCity(City("Paris", 48.0, 2.0))) // the selected city
         advanceUntilIdle()
         assertEquals("Lyon", vm.uiState.value.cities.single().label)
         io.mockk.verify { mockWeatherRepository.refreshUpdates(45.0, 4.0, false) }

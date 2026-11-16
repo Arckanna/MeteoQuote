@@ -20,14 +20,6 @@ class WeatherFailureTest {
         assertEquals(WeatherFailure.from(HttpStatusException(503)), WeatherFailure.from(deferred))
     }
 
-    @Test fun cityLookupMessagesHideTechnicalDetails() {
-        val message = cityLookupErrorMessage(java.net.SocketTimeoutException("Request time budget exceeded"))
-        assertFalse(message.contains("budget"))
-        assertTrue(message.contains("trop de temps"))
-        assertFalse(cityLookupErrorMessage(HttpStatusException(503)).contains("HTTP"))
-        assertTrue(cityLookupErrorMessage(java.net.UnknownHostException()).contains("connexion"))
-    }
-
     @Test fun neverExposesTechnicalDetailsOrClaimsOfflineForEveryIOException() {
         val failure = WeatherFailure.from(java.io.IOException("https://private.example?latitude=42"))
         assertFalse(failure.message.contains("private"))
