@@ -30,6 +30,7 @@ import androidx.lifecycle.lifecycleScope
 import com.valerie.meteoquote.data.CityRepository
 import com.valerie.meteoquote.data.model.City
 import com.valerie.meteoquote.ui.WeatherViewModel
+import com.valerie.meteoquote.ui.cityLookupErrorMessage
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import com.valerie.meteoquote.util.WeatherUtils
@@ -226,7 +227,7 @@ class MainActivity : AppCompatActivity() {
                     throw e
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, "Erreur : ${e.message ?: "Impossible d'ajouter la ville"}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, cityLookupErrorMessage(e), Toast.LENGTH_LONG).show()
                         findViewById<Button>(R.id.btnAddCity).isEnabled = true
                     }
 

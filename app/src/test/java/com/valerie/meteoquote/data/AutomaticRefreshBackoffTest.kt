@@ -12,10 +12,23 @@ class AutomaticRefreshBackoffTest {
         for (delay in listOf(60L, 120L, 240L, 480L, 900L, 900L)) {
             val error = IOException("offline")
             policy.failed("weather:city", error, now)
-            assertSame(error, policy.deferredFailure("weather:city", now.plusSeconds(delay - 1)))
+            val deferred = policy.deferredFailure("weather:city", now.plusSeconds(delay - 1))!!
+            assertSame(error, deferred.failure)
+            assertEquals(now.plusSeconds(delay), deferred.retryAt)
             assertNull(policy.deferredFailure("weather:city", now.plusSeconds(delay)))
             now = now.plusSeconds(delay)
         }
+    }
+
+    @Test fun eachDeferredReadIsANewExceptionWithTheOriginalCause() {
+        val policy = AutomaticRefreshBackoff()
+        val now = Instant.parse("2026-11-01T10:00:00Z")
+        val error = IOException("offline")
+        policy.failed("weather:city", error, now)
+        val first = policy.deferredFailure("weather:city", now)!!
+        val second = policy.deferredFailure("weather:city", now)!!
+        assertNotSame(first, second)
+        assertSame(error, first.cause)
     }
 
     @Test fun readingDuringCooldownDoesNotExtendIt() {

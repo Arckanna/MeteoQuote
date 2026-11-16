@@ -88,7 +88,8 @@ class WeatherWidgetProvider : AppWidgetProvider() {
     private fun enqueue(context: Context, ids: IntArray, force: Boolean = false) {
         if (ids.isEmpty()) return
         val request = OneTimeWorkRequestBuilder<WeatherWidgetWorker>()
-            .setInputData(workDataOf(WeatherWidgetWorker.WIDGET_IDS to ids, WeatherWidgetWorker.FORCE to force))
+            // The worker refreshes every placed widget, so the ids are only used as tags.
+            .setInputData(workDataOf(WeatherWidgetWorker.FORCE to force))
         ids.forEach { request.addTag("widget-$it") }
         // Earlier Android versions require a foreground service for expedited work.
         if (Build.VERSION.SDK_INT >= 31) {
