@@ -1,5 +1,7 @@
 # Lots A/B — Première livraison de correctifs
 
+> **Archive de livraison — classée le 8 novembre 2026.** Le registre ci-dessous est celui de la première livraison : fraîcheur, cache, erreurs secondaires et arrondi du widget ont évolué depuis. Lire [le lot C livré](LOT_C_LIVRAISON.md), [le widget/réseau actuel](OPTIMISATION_WIDGET_RESEAU.md) et [la roadmap mise à jour](CAHIER_DES_CHARGES_ROADMAP.md) pour planifier la suite.
+
 Suite de l’audit du 22 octobre 2026. Périmètre de cette livraison : B02 et B03, avec tests déterministes et suivi local. Les lots A et B ne sont pas déclarés terminés dans leur ensemble.
 
 ## Comportement livré

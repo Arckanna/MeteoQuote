@@ -2,6 +2,8 @@
 
 Implémentation du 20 octobre 2026 — branche `codex/citation-quotidienne`.
 
+Règles relues le 8 novembre 2026. Les résultats de validation en fin de document sont ceux du lot initial. Limite encore ouverte : le renouvellement au premier plan ne vérifie pas la fraîcheur de la météo comme les autres points d'entrée ; voir [le constat 3 et son suivi](REVUE_CODE_2026-11-02.md).
+
 ## Règles livrées
 
 - Une attribution de citation par date civile locale du téléphone, commune à toutes les villes et aux points d’entrée application/widget.
@@ -21,19 +23,19 @@ Un verrou commun aux instances protège l’attribution dans le processus de l�
 
 Lors de la première attribution après mise à jour, l’ancien index de la catégorie est repris s’il existe et est valide après normalisation. Les préférences de villes sont conservées. Les anciennes clés d’index ne sont plus mises à jour. Les identifiants inconnus et les préférences de type invalide déclenchent une attribution valide sans crash.
 
-Room n’est pas introduit dans ce lot. Le cache météo hors ligne relève du Lot 1.
+Ce lot initial n'introduisait pas Room. Le cache météo est maintenant implémenté séparément ; voir [le lot C livré](LOT_C_LIVRAISON.md).
 
 ## Cycle de vie et absence de réseau
 
 Une météo réussie attribue la citation en utilisant son code. Un échec réseau fournit la citation déjà attribuée, ou une pensée neutre si aucune attribution n’existe pour cette date. La citation reste affichée pendant une actualisation et après une erreur.
 
-La lecture `assignedQuote` restaure immédiatement une attribution existante au démarrage de l’écran et au chargement du widget. Cette lecture n’attribue pas de pensée neutre prématurément : lors d’une première visite du jour, la météo peut encore déterminer la catégorie.
+La lecture `assignedQuote` restaure immédiatement une attribution existante au démarrage de l'écran sans créer une attribution neutre prématurée. Le widget appelle actuellement `getQuote` pendant son rendu depuis le cache : si aucune météo utilisable n'est disponible, il peut attribuer une pensée neutre avant le téléchargement. Cette attribution reste ensuite celle de la journée.
 
 Pendant que l’écran est visible, une vérification locale est faite au retour au premier plan puis toutes les 60 secondes. Elle ne provoque aucun appel météo. Elle s’arrête quand l’écran n’est plus STARTED. Un écran laissé ouvert à minuit renouvelle donc la citation dans la minute, sauf chargement en cours ; dans ce cas la fin du chargement attribue la citation à la date courante.
 
 Le widget interroge le même repository lors de ses actualisations existantes. Son changement visuel de jour dépend donc du prochain rafraîchissement Android ou manuel, sans promesse d’exécution exacte à minuit. Aucune notification ni tâche nocturne supplémentaire n’est créée.
 
-Le widget affiche désormais un extrait de la même citation, même si le texte dépasse 80 caractères ; son layout existant conserve une limite de deux lignes et une ellipse. Toucher cet extrait ouvre l’application. En cas d’erreur réseau, le widget conserve la possibilité d’afficher la citation quotidienne.
+Le widget affiche un extrait de la même citation lorsque sa hauteur le permet ; son layout conserve une limite de deux lignes et une ellipse. Le format compact masque la citation ; voir [les seuils de taille](widget-compact.md). Toucher le corps ouvre l'application. En cas d'erreur réseau, la citation reste disponible localement.
 
 ## Prévisions J+1 à J+7
 

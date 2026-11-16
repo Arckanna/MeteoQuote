@@ -56,7 +56,73 @@ class WeatherViewModel @javax.inject.Inject constructor(
 
     private var weatherJob: kotlinx.coroutines.Job? = null
     private var locationJob: kotlinx.coroutines.Job? = null
-    private var locationIntent = 0L
+    private var selectionIntent = 0L
+    private var activeLocationRequest: Long? = null
+    private var searchJob: kotlinx.coroutines.Job? = null
+    data class SearchState(
+        val query: String = "",
+        val isSearching: Boolean = false,
+        val results: List<City> = emptyList(),
+        val requestId: Long = 0,
+        val addedCity: City? = null,
+        val message: String? = null
+    )
+    private val _searchState = MutableStateFlow(SearchState())
+    val searchState: StateFlow<SearchState> = _searchState.asStateFlow()
+
+    private fun nextSelectionIntent(query: String = _searchState.value.query): Long {
+        selectionIntent++
+        activeLocationRequest = null
+        locationJob?.cancel()
+        searchJob?.cancel()
+        _searchState.value = _searchState.value.copy(query = query, isSearching = false, results = emptyList(),
+            requestId = selectionIntent, addedCity = null, message = null)
+        return selectionIntent
+    }
+
+    fun updateSearchQuery(query: String) {
+        if (query == _searchState.value.query) return
+        // Publish the new draft and invalidate results atomically: never echo the old draft
+        // back into EditText between two key events.
+        nextSelectionIntent(query)
+    }
+
+    fun searchCity() {
+        val query = _searchState.value.query.trim()
+        val request = nextSelectionIntent()
+        if (query.isEmpty()) {
+            _searchState.value = _searchState.value.copy(message = getApplication<Application>().getString(com.valerie.meteoquote.R.string.city_search_empty))
+            return
+        }
+        _searchState.value = _searchState.value.copy(isSearching = true)
+        searchJob = viewModelScope.launch {
+            try {
+                val found = cityRepository.searchCities(query).distinctBy { it.lat to it.lon }.take(5)
+                if (request != selectionIntent) return@launch
+                _searchState.value = _searchState.value.copy(isSearching = false, results = found,
+                    message = if (found.isEmpty()) getApplication<Application>().getString(
+                        com.valerie.meteoquote.R.string.city_search_no_results, query) else null)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (request != selectionIntent) return@launch
+                _searchState.value = _searchState.value.copy(isSearching = false,
+                    message = getApplication<Application>().getString(com.valerie.meteoquote.R.string.city_search_error))
+            }
+        }
+    }
+
+    fun cancelSearch() { nextSelectionIntent() }
+
+    fun chooseSearchResult(city: City, requestId: Long) {
+        if (requestId != selectionIntent || city !in _searchState.value.results) return
+        addCity(city)
+        _searchState.value = SearchState(addedCity = city, requestId = selectionIntent)
+    }
+
+    fun consumeSearchMessage() {
+        _searchState.value = _searchState.value.copy(addedCity = null)
+    }
     private var displayedPlace: String? = null
     private var lastAttempt: java.time.Instant? = null
     private var lastWidgetRender: WidgetRenderKey? = null
@@ -73,13 +139,13 @@ class WeatherViewModel @javax.inject.Inject constructor(
 
     /** Token spans permission/acquisition and reverse geocoding. Manual choices invalidate it. */
     fun beginLocationRequest(): Long {
-        cancelLocationRequest()
-        return locationIntent
+        val request = nextSelectionIntent()
+        activeLocationRequest = request
+        return request
     }
 
     fun cancelLocationRequest() {
-        locationIntent++
-        locationJob?.cancel()
+        if (activeLocationRequest != null) nextSelectionIntent()
     }
     private val _uiState = MutableStateFlow(WeatherUiState(quote = quoteRepository.assignedQuote() ?: "—"))
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
@@ -196,7 +262,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
 
     fun selectCity(index: Int, cancelDetection: Boolean = true) {
         if (index in _uiState.value.cities.indices) {
-            if (cancelDetection) cancelLocationRequest()
+            if (cancelDetection) nextSelectionIntent()
             cityRepository.saveSelectedIndex(index)
             _uiState.value = _uiState.value.copy(selectedCityIndex = index)
             updateWidgets()
@@ -206,9 +272,9 @@ class WeatherViewModel @javax.inject.Inject constructor(
 
     fun addCity(city: City) {
         val currentCities = _uiState.value.cities.toMutableList()
-        val alreadyExists = currentCities.any { it.label.equals(city.label, ignoreCase = true) }
+        val alreadyExists = currentCities.any { it.lat == city.lat && it.lon == city.lon }
         if (alreadyExists) {
-            selectCity(currentCities.indexOfFirst { it.label.equals(city.label, ignoreCase = true) })
+            selectCity(currentCities.indexOfFirst { it.lat == city.lat && it.lon == city.lon })
         } else {
             currentCities.add(city)
             cityRepository.saveCities(currentCities)
@@ -217,24 +283,35 @@ class WeatherViewModel @javax.inject.Inject constructor(
         }
     }
 
-    fun removeCity(index: Int) {
-        cancelLocationRequest()
+    fun selectSavedCity(city: City) {
+        val index = _uiState.value.cities.indexOfFirst { it.lat == city.lat && it.lon == city.lon }
+        if (index >= 0) selectCity(index)
+    }
+
+    /** Resolve the confirmed identity against the current list, never a captured list position. */
+    fun removeCity(city: City): Boolean {
         val currentCities = _uiState.value.cities.toMutableList()
-        if (index in currentCities.indices && currentCities.size > 1) {
+        val index = currentCities.indexOfFirst { it.lat == city.lat && it.lon == city.lon }
+        if (index >= 0 && currentCities.size > 1) {
+            nextSelectionIntent()
+            val selected = currentCities.getOrNull(_uiState.value.selectedCityIndex)
             currentCities.removeAt(index)
             cityRepository.saveCities(currentCities)
-            val newIndex = if (index >= currentCities.size) currentCities.size - 1 else index.coerceAtLeast(0)
+            val retainedIndex = currentCities.indexOfFirst { it.lat == selected?.lat && it.lon == selected.lon }
+            val newIndex = if (retainedIndex >= 0) retainedIndex else index.coerceAtMost(currentCities.lastIndex)
             _uiState.value = _uiState.value.copy(
                 cities = currentCities,
                 selectedCityIndex = newIndex
             )
             cityRepository.saveSelectedIndex(newIndex)
             updateWidgets()
-            if (currentCities.isNotEmpty()) {
+            if (retainedIndex < 0) {
                 // Like selectCity: reuse fresh cache and respect the automatic-refresh cooldown.
                 refreshWeather(currentCities[newIndex], force = false)
             }
+            return true
         }
+        return false
     }
 
     /** Called only while the screen is visible, also after returning from the background. */
@@ -256,13 +333,13 @@ class WeatherViewModel @javax.inject.Inject constructor(
     }
 
     fun detectLocation(lat: Double, lon: Double, request: Long = beginLocationRequest()) {
-        if (request != locationIntent) return
+        if (request != selectionIntent || request != activeLocationRequest) return
         locationJob?.cancel()
         locationJob = viewModelScope.launch {
             try {
                 val detected = cityRepository.reverseGeocode(lat, lon)
                     ?: City("Ma position", lat, lon)
-                if (request != locationIntent) return@launch
+                if (request != selectionIntent) return@launch
                 
                 val currentCities = _uiState.value.cities.toMutableList()
                 val existingIndex = currentCities.indexOfFirst { 
@@ -283,7 +360,7 @@ class WeatherViewModel @javax.inject.Inject constructor(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (request != locationIntent) return@launch
+                if (request != selectionIntent) return@launch
                 _uiState.value = _uiState.value.copy(
                     notice = "Localisation indisponible. Recherchez une ville."
                 )
@@ -292,5 +369,3 @@ class WeatherViewModel @javax.inject.Inject constructor(
     }
 
 }
-
-

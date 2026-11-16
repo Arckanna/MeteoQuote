@@ -30,14 +30,11 @@ import androidx.lifecycle.lifecycleScope
 import com.valerie.meteoquote.data.CityRepository
 import com.valerie.meteoquote.data.model.City
 import com.valerie.meteoquote.ui.WeatherViewModel
-import com.valerie.meteoquote.ui.cityLookupErrorMessage
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import com.valerie.meteoquote.util.WeatherUtils
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
-import java.time.format.DateTimeFormatter
+import androidx.core.widget.doAfterTextChanged
 import java.util.Locale
 import android.content.Context
 import org.json.JSONArray
@@ -173,23 +170,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btnFeedback)?.setOnClickListener { openFeedbackForm() }
 
-        findViewById<Button>(R.id.btnDeleteCity)?.setOnClickListener {
-            val currentIndex = viewModel.uiState.value.selectedCityIndex
-            val cities = viewModel.uiState.value.cities
-            if (cities.size > 1) {
-                AlertDialog.Builder(this)
-                    .setTitle("Supprimer la ville")
-                    .setMessage("Voulez-vous supprimer « ${cities[currentIndex].label} » ?")
-                    .setPositiveButton("Supprimer") { _, _ ->
-                        viewModel.removeCity(currentIndex)
-                        Toast.makeText(this, "Ville supprimée", Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton("Annuler", null)
-                    .show()
-            } else {
-                Toast.makeText(this, "Impossible de supprimer : il doit rester au moins une ville", Toast.LENGTH_SHORT).show()
-            }
-        }
+        findViewById<Button>(R.id.btnManageCities).setOnClickListener { showCityManager() }
 
         findViewById<Button>(R.id.btnLocate)?.setOnClickListener {
             val request = viewModel.beginLocationRequest()
@@ -198,42 +179,60 @@ class MainActivity : AppCompatActivity() {
         }
 
         val etCitySearch: EditText = findViewById(R.id.etCitySearch)
-        findViewById<Button>(R.id.btnAddCity).setOnClickListener {
-            val q = etCitySearch.text.toString().trim()
-            if (q.isEmpty()) {
-                Toast.makeText(this, "Saisis un nom de ville", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            // Désactiver le bouton pendant la recherche
-            viewModel.cancelLocationRequest()
-            findViewById<Button>(R.id.btnAddCity).isEnabled = false
-            lifecycleScope.launch {
-                try {
-                    val found = withContext(Dispatchers.IO) {
-                        cityRepository.geocodeCity(q)
-                    }
-                    withContext(Dispatchers.Main) {
-                        if (found == null) {
-                            Toast.makeText(this@MainActivity, "Ville introuvable", Toast.LENGTH_SHORT).show()
-                        } else {
-                            viewModel.addCity(found)
-                            addToRecents(found)
-                            etCitySearch.text.clear()
-                            Toast.makeText(this@MainActivity, "Ville ajoutée : ${found.label}", Toast.LENGTH_SHORT).show()
-                        }
-                        findViewById<Button>(R.id.btnAddCity).isEnabled = true
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, cityLookupErrorMessage(e), Toast.LENGTH_LONG).show()
-                        findViewById<Button>(R.id.btnAddCity).isEnabled = true
-                    }
-
-                }
-            }
+        // The ViewModel owns the draft across Activity recreation.
+        etCitySearch.isSaveEnabled = false
+        etCitySearch.setText(viewModel.searchState.value.query)
+        etCitySearch.doAfterTextChanged { viewModel.updateSearchQuery(it.toString()) }
+        findViewById<Button>(R.id.btnAddCity).setOnClickListener { viewModel.searchCity() }
+        findViewById<Button>(R.id.btnCancelSearch).setOnClickListener { viewModel.cancelSearch() }
+    }
+    private fun showCityManager() {
+        val cities = viewModel.uiState.value.cities.toList()
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val padding = (16 * resources.displayMetrics.density).toInt()
+            setPadding(padding, padding, padding, padding)
         }
+        val scroll = android.widget.ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.city_manage)
+            .setView(scroll)
+            .setNegativeButton(R.string.weather_data_close, null)
+            .create()
+        if (cities.size == 1) content.addView(TextView(this).apply { setText(R.string.city_keep_one) })
+        cities.forEach { city ->
+            fun action(label: String, description: String, onClick: () -> Unit) =
+                com.google.android.material.button.MaterialButton(this).apply {
+                    text = label
+                    contentDescription = description
+                    isAllCaps = false
+                    minHeight = (48 * resources.displayMetrics.density).toInt()
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    setOnClickListener { onClick() }
+                }
+            content.addView(action(city.label, getString(R.string.city_show_accessibility, city.label)) {
+                viewModel.selectSavedCity(city)
+                dialog.dismiss()
+            })
+            content.addView(action(getString(R.string.city_remove), getString(R.string.city_remove_accessibility, city.label)) {
+                dialog.dismiss()
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.city_remove_title)
+                    .setMessage(getString(R.string.city_remove_confirm, city.label))
+                    .setPositiveButton(R.string.city_remove) { _, _ ->
+                        val removed = viewModel.removeCity(city)
+                        if (removed) {
+                            recentCities.removeAll { it.lat == city.lat && it.lon == city.lon }
+                            saveRecentCities()
+                            updateRecentChips()
+                        }
+                        Toast.makeText(this, if (removed) R.string.city_removed else R.string.city_remove_unavailable, Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton(R.string.city_search_cancel, null)
+                    .show()
+            }.apply { isEnabled = cities.size > 1 })
+        }
+        dialog.show()
     }
 
     private fun observeViewModel() {
@@ -243,7 +242,49 @@ class MainActivity : AppCompatActivity() {
                     while (true) {
                         viewModel.refreshDailyQuote()
                         viewModel.refreshVisibleWeather()
+                        renderFreshness(viewModel.uiState.value, java.time.Instant.now())
                         kotlinx.coroutines.delay(60_000)
+                    }
+                }
+                launch {
+                    viewModel.searchState.collect { state ->
+                        if (state != viewModel.searchState.value) return@collect
+                        val input = findViewById<EditText>(R.id.etCitySearch)
+                        // Typing already updates the ViewModel via the TextWatcher. Echoing
+                        // every emission here can overwrite a newer IME edit with an old draft.
+                        // Restore on creation; clear only after an explicit, still-current choice.
+                        if (state.addedCity != null && input.text.toString() != state.query) input.setText(state.query)
+                        findViewById<Button>(R.id.btnAddCity).isEnabled = !state.isSearching
+                        findViewById<View>(R.id.searchProgress).visibility = if (state.isSearching) View.VISIBLE else View.GONE
+                        findViewById<View>(R.id.btnCancelSearch).visibility =
+                            if (state.isSearching || state.results.isNotEmpty()) View.VISIBLE else View.GONE
+                        findViewById<TextView>(R.id.searchStatus).apply {
+                            text = when {
+                                state.isSearching -> getString(R.string.city_search_loading)
+                                state.results.isNotEmpty() -> getString(R.string.city_search_choose)
+                                else -> state.message.orEmpty()
+                            }
+                            visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
+                        }
+                        findViewById<LinearLayout>(R.id.searchResults).apply {
+                            removeAllViews()
+                            visibility = if (state.results.isEmpty()) View.GONE else View.VISIBLE
+                            state.results.forEach { city ->
+                                addView(com.google.android.material.button.MaterialButton(this@MainActivity).apply {
+                                    text = city.label
+                                    isAllCaps = false
+                                    gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+                                    minHeight = (48 * resources.displayMetrics.density).toInt()
+                                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                                    setOnClickListener { viewModel.chooseSearchResult(city, state.requestId) }
+                                })
+                            }
+                        }
+                        state.addedCity?.let {
+                            addToRecents(it)
+                            Toast.makeText(this@MainActivity, getString(R.string.city_search_selected, it.label), Toast.LENGTH_SHORT).show()
+                            viewModel.consumeSearchMessage()
+                        }
                     }
                 }
                 viewModel.uiState.collect { updateUI(it) }
@@ -256,6 +297,29 @@ class MainActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
     }
 
+    private fun renderFreshness(state: com.valerie.meteoquote.ui.WeatherUiState, now: java.time.Instant) {
+        val hasWeather = state.currentTemp != null && !state.isLoading && state.error == null
+        findViewById<TextView>(R.id.tvCurrentWeatherTitle).text =
+            if (hasWeather) com.valerie.meteoquote.data.WeatherFreshness.title(state.observedAt, state.updatedAt, now)
+            else getString(R.string.current_weather)
+        findViewById<TextView>(R.id.tvUpdated).text = listOfNotNull(
+            if (hasWeather) com.valerie.meteoquote.ui.WeatherFreshnessText.summary(
+                this, state.observedAt, state.updatedAt, now) else null,
+            getString(R.string.weather_refreshing).takeIf { state.isRefreshing && hasWeather },
+            state.notice).joinToString("\n")
+        findViewById<Button>(R.id.btnWeatherDetails).apply {
+            visibility = if (hasWeather) View.VISIBLE else View.GONE
+            setOnClickListener {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle(R.string.weather_data_dates)
+                    .setMessage(com.valerie.meteoquote.data.WeatherFreshness.label(
+                        state.observedAt, state.updatedAt, state.zoneId, java.time.Instant.now()).replace(" · ", "\n\n"))
+                    .setPositiveButton(R.string.weather_data_close, null)
+                    .show()
+            }
+        }
+    }
+
     private fun updateUI(state: com.valerie.meteoquote.ui.WeatherUiState) {
         val labels = state.cities.map { it.label }
         if ((0 until cityNamesAdapter.count).map { cityNamesAdapter.getItem(it) } != labels) {
@@ -264,8 +328,8 @@ class MainActivity : AppCompatActivity() {
         }
         spinner.contentDescription = "Ville sélectionnée : " + labels.getOrNull(state.selectedCityIndex).orEmpty()
         if (spinner.selectedItemPosition != state.selectedCityIndex) spinner.setSelection(state.selectedCityIndex)
-        // Activer/désactiver le bouton de suppression selon le nombre de villes
-        findViewById<Button>(R.id.btnDeleteCity)?.isEnabled = state.cities.size > 1
+
+
 
         findViewById<Button>(R.id.btnRefresh).isEnabled = !state.isLoading && !state.isRefreshing
         findViewById<Button>(R.id.btnRefresh).visibility = if (state.error == null && state.notice == null) View.VISIBLE else View.GONE
@@ -274,14 +338,7 @@ class MainActivity : AppCompatActivity() {
             isEnabled = !state.isLoading && !state.isRefreshing
         }
         val now = java.time.Instant.now()
-        findViewById<TextView>(R.id.tvCurrentWeatherTitle).text =
-            if (state.currentTemp == null) getString(R.string.current_weather)
-            else com.valerie.meteoquote.data.WeatherFreshness.title(state.observedAt, state.updatedAt, now)
-        findViewById<TextView>(R.id.tvUpdated).text = listOfNotNull(
-            if (state.currentTemp != null) com.valerie.meteoquote.data.WeatherFreshness.label(
-                state.observedAt, state.updatedAt, state.zoneId, now) else null,
-            "Mise à jour…".takeIf { state.isRefreshing && state.currentTemp != null },
-            state.notice).joinToString(" · ")
+        renderFreshness(state, now)
         // Gestion du chargement
         if (state.isLoading) {
             containerHourly.removeAllViews()

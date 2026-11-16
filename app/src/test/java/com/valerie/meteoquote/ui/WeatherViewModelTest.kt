@@ -69,6 +69,241 @@ class WeatherViewModelTest {
     @org.junit.After
     fun tearDown() { Dispatchers.resetMain() }
 
+    @Test fun lateSearchCannotReplaceSelectedExistingCity() = runTest(testDispatcher) {
+        val cities = listOf(City("Toulouse", 43.0, 1.0), City("Lyon", 45.0, 4.0))
+        every { mockCityRepository.loadCities() } returns cities
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val response = kotlinx.coroutines.CompletableDeferred<City>()
+        coEvery { mockCityRepository.searchCities("Paris") } coAnswers {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { listOf(response.await()) }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        vm.selectCity(1)
+        response.complete(City("Paris", 48.0, 2.0))
+        advanceUntilIdle()
+        assertEquals(cities, vm.uiState.value.cities)
+        assertEquals(1, vm.uiState.value.selectedCityIndex)
+        assertEquals("Paris", vm.searchState.value.query)
+        assertFalse(vm.searchState.value.isSearching)
+        assertEquals(null, vm.searchState.value.message)
+    }
+
+    @Test fun locationRequestInvalidatesLateSearch() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        coEvery { mockCityRepository.reverseGeocode(45.0, 4.0) } returns City("Position", 45.0, 4.0)
+        val response = kotlinx.coroutines.CompletableDeferred<City>()
+        coEvery { mockCityRepository.searchCities("Paris") } coAnswers {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { listOf(response.await()) }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        vm.detectLocation(45.0, 4.0, vm.beginLocationRequest())
+        response.complete(City("Paris", 48.0, 2.0))
+        advanceUntilIdle()
+        assertEquals("Position", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        assertEquals("Paris", vm.searchState.value.query)
+        assertEquals(null, vm.searchState.value.addedCity)
+    }
+
+    @Test fun failedSearchKeepsDraftAndAllowsRetry() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        coEvery { mockCityRepository.searchCities("Paris") } throws java.io.IOException()
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        advanceUntilIdle()
+        assertEquals("Paris", vm.searchState.value.query)
+        assertFalse(vm.searchState.value.isSearching)
+        assertTrue(vm.searchState.value.message != null)
+        coEvery { mockCityRepository.searchCities("Paris") } returns emptyList()
+        vm.searchCity()
+        advanceUntilIdle()
+        assertEquals("Aucune ville trouvée pour « Paris ». Vérifiez le nom ou précisez la région.", vm.searchState.value.message)
+        assertEquals("Paris", vm.searchState.value.query)
+        assertFalse(vm.searchState.value.isSearching)
+    }
+
+    @Test fun lateSearchCannotReplaceManualSelectionOrClearNewDraft() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val response = kotlinx.coroutines.CompletableDeferred<City>()
+        coEvery { mockCityRepository.searchCities("Paris") } coAnswers {
+            // Deliberately ignore cancellation to exercise the intent guard itself.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { listOf(response.await()) }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        vm.addCity(City("Lyon", 45.0, 4.0))
+        vm.updateSearchQuery("Bordeaux")
+        response.complete(City("Paris", 48.0, 2.0))
+        advanceUntilIdle()
+        assertEquals("Lyon", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        assertFalse(vm.uiState.value.cities.any { it.label == "Paris" })
+        assertEquals("Bordeaux", vm.searchState.value.query)
+        assertFalse(vm.searchState.value.isSearching)
+        assertEquals(null, vm.searchState.value.addedCity)
+        assertEquals(null, vm.searchState.value.message)
+    }
+
+    @Test fun editingDraftInvalidatesSearchEvenWhenOriginalTextIsRetyped() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val response = kotlinx.coroutines.CompletableDeferred<City>()
+        coEvery { mockCityRepository.searchCities("Paris") } coAnswers {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { listOf(response.await()) }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        vm.updateSearchQuery("Lyon")
+        vm.updateSearchQuery("Paris")
+        response.complete(City("Paris", 48.0, 2.0))
+        advanceUntilIdle()
+        assertEquals("Toulouse", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        assertEquals("Paris", vm.searchState.value.query)
+        assertEquals(null, vm.searchState.value.addedCity)
+    }
+
+    @Test fun successfulSearchSelectsCityAndClearsSubmittedDraft() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val paris = City("Paris", 48.0, 2.0)
+        coEvery { mockCityRepository.searchCities("Paris") } returns listOf(paris)
+        val vm = createViewModel()
+        vm.updateSearchQuery(" Paris ")
+        vm.searchCity()
+        advanceUntilIdle()
+        assertEquals("Toulouse", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        assertEquals(listOf(paris), vm.searchState.value.results)
+        vm.chooseSearchResult(paris, vm.searchState.value.requestId)
+        advanceUntilIdle()
+        assertEquals(paris, vm.uiState.value.cities[vm.uiState.value.selectedCityIndex])
+        assertEquals("", vm.searchState.value.query)
+        assertEquals(paris, vm.searchState.value.addedCity)
+        assertFalse(vm.searchState.value.isSearching)
+        vm.consumeSearchMessage()
+        assertEquals(null, vm.searchState.value.message)
+        assertEquals(null, vm.searchState.value.addedCity)
+    }
+
+    @Test fun searchInvalidatesPendingLocationAcquisition() = runTest(testDispatcher) {
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        coEvery { mockCityRepository.searchCities("Paris") } returns listOf(City("Paris", 48.0, 2.0))
+        val vm = createViewModel()
+        val request = vm.beginLocationRequest()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        vm.detectLocation(45.0, 4.0, request)
+        advanceUntilIdle()
+        coVerify(exactly = 0) { mockCityRepository.reverseGeocode(any(), any()) }
+        assertEquals("Toulouse", vm.uiState.value.cities[vm.uiState.value.selectedCityIndex].label)
+        assertEquals("Paris", vm.searchState.value.results.single().label)
+    }
+
+    @Test fun cancellationKeepsDraftAndRejectsLateResults() = runTest(testDispatcher) {
+        val response = kotlinx.coroutines.CompletableDeferred<List<City>>()
+        coEvery { mockCityRepository.searchCities(any()) } coAnswers {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { response.await() }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        assertTrue(vm.searchState.value.isSearching)
+        vm.cancelSearch()
+        response.complete(listOf(City("Paris", 48.0, 2.0)))
+        advanceUntilIdle()
+        assertEquals("Paris", vm.searchState.value.query)
+        assertTrue(vm.searchState.value.results.isEmpty())
+        assertFalse(vm.searchState.value.isSearching)
+        assertEquals(null, vm.searchState.value.message)
+    }
+
+    @Test fun homonymsRequireExplicitChoiceAndStaleChoiceIsIgnored() = runTest(testDispatcher) {
+        val results = (1..6).map { City("Paris, région $it (pays $it)", it.toDouble(), 2.0) }
+        coEvery { mockCityRepository.searchCities(any()) } returns results
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        advanceUntilIdle()
+        assertEquals(results.take(5), vm.searchState.value.results)
+        assertEquals(1, vm.uiState.value.cities.size)
+        val oldRequest = vm.searchState.value.requestId
+        vm.updateSearchQuery("Lyon")
+        vm.chooseSearchResult(results[1], oldRequest)
+        assertEquals("Lyon", vm.searchState.value.query)
+        assertEquals(1, vm.uiState.value.cities.size)
+        vm.searchCity()
+        advanceUntilIdle()
+        vm.chooseSearchResult(results[1], vm.searchState.value.requestId)
+        assertEquals(results[1], vm.uiState.value.cities[vm.uiState.value.selectedCityIndex])
+    }
+
+    @Test fun lateFailureDoesNotClearNewSearchLoadingOrDraft() = runTest(testDispatcher) {
+        val old = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val next = kotlinx.coroutines.CompletableDeferred<List<City>>()
+        coEvery { mockCityRepository.searchCities("Paris") } coAnswers {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { old.await(); throw java.io.IOException() }
+        }
+        coEvery { mockCityRepository.searchCities("Lyon") } coAnswers { next.await() }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        vm.updateSearchQuery("Lyon")
+        vm.searchCity()
+        runCurrent()
+        old.complete(Unit)
+        runCurrent()
+        assertTrue(vm.searchState.value.isSearching)
+        assertEquals("Lyon", vm.searchState.value.query)
+        assertEquals(null, vm.searchState.value.message)
+        next.complete(listOf(City("Lyon", 45.0, 4.0)))
+        advanceUntilIdle()
+        assertEquals("Lyon", vm.searchState.value.results.single().label)
+    }
+
+    @Test fun confirmedRemovalUsesIdentityAfterListPositionsChange() = runTest(testDispatcher) {
+        val a = City("Même nom", 43.0, 1.0)
+        val b = City("Même nom", 45.0, 4.0)
+        val c = City("Paris", 48.0, 2.0)
+        every { mockCityRepository.loadCities() } returns listOf(a, b, c)
+        val vm = createViewModel()
+        vm.selectCity(2)
+        assertTrue(vm.removeCity(a)) // b is now at index 0, c at index 1.
+        assertTrue(vm.removeCity(b.copy(label = "Libellé ancien")))
+        assertEquals(listOf(c), vm.uiState.value.cities)
+        assertEquals(c, vm.uiState.value.cities[vm.uiState.value.selectedCityIndex])
+        assertFalse(vm.removeCity(b)) // A second confirmation cannot delete c.
+        assertFalse(vm.removeCity(c)) // Keep at least one city.
+    }
+
+    @Test fun removalInvalidatesLateSearchWithoutDeletingAnotherCity() = runTest(testDispatcher) {
+        val a = City("Toulouse", 43.0, 1.0)
+        val b = City("Lyon", 45.0, 4.0)
+        every { mockCityRepository.loadCities() } returns listOf(a, b)
+        val response = kotlinx.coroutines.CompletableDeferred<List<City>>()
+        coEvery { mockCityRepository.searchCities(any()) } coAnswers {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { response.await() }
+        }
+        val vm = createViewModel()
+        vm.updateSearchQuery("Paris")
+        vm.searchCity()
+        runCurrent()
+        assertTrue(vm.removeCity(a))
+        response.complete(listOf(City("Paris", 48.0, 2.0)))
+        advanceUntilIdle()
+        assertEquals(listOf(b), vm.uiState.value.cities)
+        assertEquals(0, vm.uiState.value.selectedCityIndex)
+        assertTrue(vm.searchState.value.results.isEmpty())
+        assertEquals("Paris", vm.searchState.value.query)
+    }
+
     private fun createViewModel(): WeatherViewModel {
         return WeatherViewModel(
             application,

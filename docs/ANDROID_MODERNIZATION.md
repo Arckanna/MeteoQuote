@@ -1,5 +1,7 @@
 # Audit Météo & Citation — 17 octobre 2026
 
+> **Archive historique — classée le 8 novembre 2026.** Ce texte décrit la révision du 17 octobre, avant Hilt, Compose et Room. Ses versions, exigences externes et résultats ne constituent pas une validation actuelle. Pour travailler sur le projet, lire [l'index](README.md), [l'injection actuelle](injection-dependances.md) et [la publication](RELEASE.md).
+
 Révision initiale : 62173ae, identique au HEAD GitHub vérifié. Worktree propre,
 branche `feature/android-modernization` créée avant modification. Le checkout de
 travail est celui de Codex, pas le checkout principal sur D:.

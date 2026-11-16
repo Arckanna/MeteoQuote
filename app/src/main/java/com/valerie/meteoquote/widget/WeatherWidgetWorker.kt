@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import androidx.work.await
 
 @androidx.hilt.work.HiltWorker
 class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
@@ -50,6 +51,8 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
             cached = weatherRepository.cachedWeather(city.lat, city.lon)
             publish(cached)
             if (!inputData.getBoolean(NETWORK, false)) {
+                if (inputData.getBoolean(RENDER_ONLY, false) && !inputData.getBoolean(FORCE, false))
+                    return Result.success()
                 if (inputData.getBoolean(FORCE, false) || cached?.fetchedAt?.let {
                     com.valerie.meteoquote.data.CachePolicy.fresh(it.toEpochMilli(), java.time.Instant.now())
                 } != true) {
@@ -60,10 +63,9 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
                             .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                         .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, java.util.concurrent.TimeUnit.SECONDS)
                         .build()
-                    androidx.work.WorkManager.getInstance(applicationContext).enqueueUniqueWork(
-                        "weather-widget-network-$key",
-                        if (inputData.getBoolean(FORCE, false)) androidx.work.ExistingWorkPolicy.REPLACE
-                        else androidx.work.ExistingWorkPolicy.KEEP, request)
+                    WidgetWorkScheduler.network(
+                        androidx.work.WorkManager.getInstance(applicationContext), key, request,
+                        force = inputData.getBoolean(FORCE, false)).await()
                 }
                 return Result.success()
             }
@@ -75,7 +77,10 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
         } catch (e: Exception) {
             publish(cached, if (e is com.valerie.meteoquote.data.WeatherStorageException)
                 "Stockage indisponible" else "Actualisation impossible")
-            return if (shouldRetry(e, inputData.getBoolean(NETWORK, false), runAttemptCount)) Result.retry()
+            // The error has been rendered. Do not fail the local chain and cancel a
+            // newer selection/forced refresh already appended behind this pass.
+            if (!inputData.getBoolean(NETWORK, false)) return Result.success()
+            return if (shouldRetry(e, networkRun = true, attempt = runAttemptCount)) Result.retry()
                 else Result.failure()
         }
     }
@@ -100,6 +105,6 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
         const val NETWORK = "network"
         const val NETWORK_KEY = "network_key"
         const val FORCE = "force"
+        const val RENDER_ONLY = "render_only"
     }
 }
-

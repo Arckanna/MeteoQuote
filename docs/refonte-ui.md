@@ -1,5 +1,7 @@
 # Refonte UX/UI — Météo & Citation
 
+> **Archive de refonte — classée le 8 novembre 2026.** L'ordre de lecture et la citation ont changé depuis cette étape : la citation est maintenant avant les prévisions et rendue en Compose, sans bouton de renouvellement. Voir [la présentation actuelle](citation-premier-plan.md) et [la migration Compose](migration-compose.md). Les résultats ci-dessous restent des validations historiques.
+
 Branche : `codex/refonte-ui`. Base : version 6.7. Views/XML conservés.
 
 ## Diagnostic et composition

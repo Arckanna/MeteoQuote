@@ -45,26 +45,32 @@ class AndroidCityRepository(private val context: Context, private val transport:
             .apply()
     }
     
-    override suspend fun geocodeCity(name: String): City? {
+    override suspend fun searchCities(name: String): List<City> {
         val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.toString())
-        val url = "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=1&language=fr&format=json"
+        val url = "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=5&language=fr&format=json"
         val body = transport.get(url)
-        val results = JSONObject(body).optJSONArray("results") ?: return null
-        if (results.length() == 0) return null
-        val first = results.getJSONObject(0)
+        return parseSearchResults(body)
+    }
 
-        val nm = first.optString("name", name)
-        val admin1 = first.optString("admin1", "")
-        val country = first.optString("country_code", "")
-        val label = when {
-            admin1.isNotEmpty() && country.isNotEmpty() -> "$nm, $admin1 ($country)"
-            country.isNotEmpty() -> "$nm ($country)"
-            else -> nm
-        }
+    internal fun parseSearchResults(body: String): List<City> {
+        val results = JSONObject(body).optJSONArray("results") ?: return emptyList()
+        return (0 until results.length()).mapNotNull { index ->
+            val first = results.getJSONObject(index)
 
-        val lat = first.getDouble("latitude")
-        val lon = first.getDouble("longitude")
-        return City(label, lat, lon)
+            val nm = first.optString("name", "")
+            val admin1 = first.optString("admin1", "")
+            val country = first.optString("country", "").ifBlank { first.optString("country_code", "") }
+            val label = when {
+                admin1.isNotEmpty() && country.isNotEmpty() -> "$nm, $admin1 ($country)"
+                country.isNotEmpty() -> "$nm ($country)"
+                admin1.isNotEmpty() -> "$nm, $admin1"
+                else -> nm
+            }
+
+            val lat = first.optDouble("latitude", Double.NaN)
+            val lon = first.optDouble("longitude", Double.NaN)
+            if (nm.isBlank() || lat !in -90.0..90.0 || lon !in -180.0..180.0) null else City(label, lat, lon)
+        }.distinctBy { it.lat to it.lon }.take(5)
     }
     
     override suspend fun reverseGeocode(lat: Double, lon: Double): City? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

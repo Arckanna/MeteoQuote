@@ -1,5 +1,7 @@
 # Lot C — Préparation du cache Room et de la consultation hors ligne
 
+> **Archive de conception — classée le 8 novembre 2026.** Le développement est livré. Les contrats illustratifs et le schéma à cinq tables ci-dessous sont des propositions initiales, pas l'API ni le schéma actuels. La référence de maintenance est [LOT_C_LIVRAISON.md](LOT_C_LIVRAISON.md) : deux tables d'instantanés avec séries JSON validées. Les estimations et actions C0–C5 ci-dessous ne sont pas un reste à faire.
+
 Date : 22 octobre 2026. Statut : spécification de référence ; voir [implémentation et validation du lot C](LOT_C_LIVRAISON.md) pour le périmètre livré et les adaptations de conception.
 
 Référence locale : commit `2668e11`, branche `codex/fiabilite-aqi-localisation`. Cette préparation ne présume pas que la fusion dans master a été effectuée. Au démarrage du développement, vérifier la base de branche et conserver les correctifs B02/B03.

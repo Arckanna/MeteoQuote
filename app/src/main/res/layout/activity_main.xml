@@ -44,7 +44,7 @@
           android:layout_height="wrap_content"
           android:minHeight="48dp"
           android:hint="@string/search_city"
-          android:inputType="textCapWords|textMultiLine"
+          android:inputType="textCapWords|textMultiLine|textNoSuggestions"
           android:importantForAutofill="no"
           android:scrollHorizontally="false"
           android:singleLine="false"
@@ -58,25 +58,61 @@
             style="@style/ActionIcon"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:contentDescription="@string/add_city"
-            app:icon="@drawable/ic_add" />
-          <Button
-            android:id="@+id/btnLocate"
-            style="@style/ActionIcon"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/use_location"
-            app:icon="@drawable/sharp_my_location_24" />
-          <Button
-            android:id="@+id/btnDeleteCity"
-            style="@style/ActionIcon"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/delete_city"
-            app:icon="@drawable/ic_delete"
-            app:iconTint="@color/destructive_tint" />
+            android:contentDescription="@string/city_search_action"
+            app:icon="@android:drawable/ic_menu_search" />
         </LinearLayout>
       </com.valerie.meteoquote.ui.SearchActionsRow>
+      <com.valerie.meteoquote.ui.CityActionsRow
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+      <Button
+        android:id="@+id/btnLocate"
+        style="@style/ActionSecondary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:text="@string/city_my_position"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:contentDescription="@string/city_my_position"
+        app:icon="@drawable/sharp_my_location_24" />
+      <Button
+        android:id="@+id/btnManageCities"
+        style="@style/ActionSecondary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:text="@string/city_manage"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:contentDescription="@string/city_manage" />
+      </com.valerie.meteoquote.ui.CityActionsRow>
+      <ProgressBar
+        android:id="@+id/searchProgress"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+      <TextView
+        android:id="@+id/searchStatus"
+        style="@style/TextBody"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:visibility="gone" />
+      <LinearLayout
+        android:id="@+id/searchResults"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone" />
+      <Button
+        android:id="@+id/btnCancelSearch"
+        style="@style/ActionSecondary"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/city_search_cancel"
+        android:visibility="gone" />
       <HorizontalScrollView
         android:id="@+id/recentChipsScroll"
         android:layout_width="match_parent"
@@ -150,7 +186,7 @@
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:accessibilityLiveRegion="polite" />
+            android:accessibilityLiveRegion="none" />
           <Button
             android:id="@+id/btnRefresh"
             style="@style/ActionIcon"
@@ -160,6 +196,15 @@
             app:icon="@drawable/ic_refresh" />
         </LinearLayout>
       </LinearLayout>
+      <Button
+        android:id="@+id/btnWeatherDetails"
+        style="@style/ActionSecondary"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:text="@string/weather_data_details"
+        android:contentDescription="@string/weather_data_details_accessibility"
+        android:visibility="gone" />
       <com.valerie.meteoquote.ui.MetricLayout
         android:id="@+id/containerChips"
         android:layout_width="match_parent"

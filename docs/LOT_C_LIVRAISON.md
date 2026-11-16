@@ -1,14 +1,16 @@
 # Lot C — Cache Room et consultation hors ligne
 
+Référence de stockage relue le 8 novembre 2026. Les résultats du 23 octobre sont conservés comme historique ; les règles de programmation plus récentes du widget sont décrites dans [OPTIMISATION_WIDGET_RESEAU.md](OPTIMISATION_WIDGET_RESEAU.md).
+
 ## Comportement implémenté
 
 - Room devient la source des données météo présentées par l’application et le widget. Les lieux sont identifiés par coordonnées validées, indépendamment du nom affiché.
 - Le cache est émis avant le réseau. L’écran conserve ses données pendant une actualisation et après un échec, avec une indication d’âge et un moyen de réessayer. Une ville sans cache dispose de son propre état vide.
 - Réévaluation à la reprise et chaque minute au premier plan : les heures passées, jours terminés et pics de la veille ne sont pas recyclés sous une nouvelle date.
-- Données récentes pendant 30 minutes ; « dernières données connues » après 24 heures ; cache non présenté à partir de sept jours. Une date future est signalée comme incertaine. Purge des entrées expirées et des lieux non référencés lors des consultations réseau/flux.
+- Récupération récente pendant 30 minutes ; indicateur `isOld` après 24 heures ; cache non présenté à partir de sept jours. Le titre « Météo actuelle » suit une autre règle : `WeatherFreshness` exige une heure de conditions connue, non future et âgée de moins d'une heure, sans date de téléchargement future. Sinon le titre devient « Dernières conditions connues ». Purge des entrées expirées et des lieux non référencés lors des consultations réseau/flux.
 - L’AQI garde son appel, son horodatage et son budget de cinq secondes indépendants. Un rafraîchissement météo du widget ne l’efface pas. Une mesure absente pour l’heure courante n’est pas remplacée par celle de l’heure précédente ; après 24 heures, l’AQI n’est plus présenté.
 - Requêtes en cours partagées par lieu et service. La fermeture d’un consommateur n’annule pas le travail attendu par un autre ; le dernier départ annule l’appel.
-- Widget : rendu local sans contrainte réseau, puis tâche réseau unique avec contrainte de connexion. Trois exécutions maximum pour les erreurs transitoires, backoff exponentiel à partir de 30 secondes. Les clics rejoignent une tâche réseau existante.
+- Widget : file de rendu local sans contrainte réseau, distincte des tâches réseau par lieu avec contrainte de connexion. `ACTION_RENDER` reste exclusivement local. Trois exécutions réseau maximum pour les erreurs transitoires, backoff exponentiel à partir de 30 secondes. Les demandes automatiques rejoignent le travail en attente ; une demande forcée le remplace et transmet `FORCE` jusqu'au repository. Une erreur de cache traitée par un rendu local ne fait pas échouer les rendus suivants déjà en file.
 - La citation du jour est obtenue localement même sans météo. Les anciens rendus `widget_render_v1` ne sont plus relus. Le changement de sélection demande un nouveau rendu ; les réponses tardives ne publient pas une ancienne ville sous la nouvelle sélection.
 - Les erreurs de localisation utilisent un message secondaire et ne masquent plus la météo valide. Les températures entières du widget sont arrondies au lieu d’être tronquées.
 
@@ -42,7 +44,7 @@ Validation locale terminée le 23 octobre 2026 :
 - Lint : aucune erreur, 71 avertissements existants ; `git diff --check` sans erreur.
 - Le test d’actualisation du widget vérifie désormais l’identité du nouveau travail : avec la politique `KEEP`, le nombre d’entrées historiques ne garantit pas qu’une actualisation a été lancée.
 
-La matrice CI API 24/36 est configurée mais n’a pas été exécutée à distance. Les modifications sont locales sur `codex/cache-room-hors-ligne`, sans commit, push ni fusion dans `master` à ce stade.
+Au moment de la validation du 23 octobre, la matrice CI distante n'avait pas été exécutée et les modifications étaient encore locales. Ces mentions décrivent cette livraison historique ; elles ne décrivent pas le statut Git actuel. Le workflow présent dans le dépôt exécute désormais `OfflineCacheTest` sur API 24 et 36 ; son dernier résultat distant n'a pas été vérifié pendant cette relecture.
 
 ## Avant diffusion publique
 

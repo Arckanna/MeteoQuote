@@ -8,6 +8,6 @@ interface CityRepository {
     fun saveCities(cities: List<City>)
     fun selectedIndex(size: Int): Int
     fun saveSelectedIndex(index: Int)
-    suspend fun geocodeCity(name: String): City?
+    suspend fun searchCities(name: String): List<City>
     suspend fun reverseGeocode(lat: Double, lon: Double): City?
 }
