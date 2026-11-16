@@ -306,7 +306,8 @@ class WeatherViewModel @javax.inject.Inject constructor(
             cityRepository.saveSelectedIndex(newIndex)
             updateWidgets()
             if (retainedIndex < 0) {
-                refreshWeather(currentCities[newIndex])
+                // Like selectCity: reuse fresh cache and respect the automatic-refresh cooldown.
+                refreshWeather(currentCities[newIndex], force = false)
             }
             return true
         }

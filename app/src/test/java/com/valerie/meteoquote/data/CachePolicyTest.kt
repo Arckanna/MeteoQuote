@@ -18,9 +18,15 @@ class CachePolicyTest {
         assertTrue(CachePolicy.usable(stored, at(CachePolicy.EXPIRY_MILLIS - 1)))
         assertFalse(CachePolicy.usable(stored, at(CachePolicy.EXPIRY_MILLIS)))
     }
-    @Test fun identityUsesCoordinatesWithoutRoundingAndNormalizesNegativeZero() {
+    @Test fun identityIsRoundedToAboutOneHundredMetresAndNormalizesNegativeZero() {
         assertEquals(CachePolicy.key(-0.0, 0.0), CachePolicy.key(0.0, -0.0))
-        assertNotEquals(CachePolicy.key(48.0, 2.0), CachePolicy.key(48.000001, 2.0))
+        assertEquals("0.0:0.0", CachePolicy.key(-0.0001, -0.0001))
+        // Two GPS fixes a few metres apart share the same cache entry.
+        assertEquals(CachePolicy.key(43.60471, 1.44421), CachePolicy.key(43.60468, 1.44418))
+        assertEquals("43.605:1.444", CachePolicy.key(43.6047, 1.4442))
+        // Places a few hundred metres apart stay distinct.
+        assertNotEquals(CachePolicy.key(48.0, 2.0), CachePolicy.key(48.003, 2.0))
+        assertEquals("-90.0:180.0", CachePolicy.key(-90.0, 180.0))
     }
     @Test(expected = IllegalArgumentException::class) fun invalidCoordinatesRejected() {
         CachePolicy.key(Double.NaN, 2.0)

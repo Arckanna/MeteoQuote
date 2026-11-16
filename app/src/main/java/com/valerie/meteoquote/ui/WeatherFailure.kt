@@ -14,6 +14,8 @@ data class WeatherFailure(val kind: WeatherErrorKind, val message: String) {
             is com.valerie.meteoquote.data.NoCachedWeatherException -> from(error.failure).let {
                 it.copy(message = "Aucune météo enregistrée pour cette ville. " + it.message)
             }
+            // No request was sent; describe the failure that started the cooldown.
+            is com.valerie.meteoquote.data.RefreshDeferredException -> from(error.failure)
             is com.valerie.meteoquote.data.WeatherStorageException -> WeatherFailure(WeatherErrorKind.UNKNOWN,
                 "Stockage météo indisponible. Réessayez.")
             is HttpStatusException -> when (error.statusCode) {
@@ -31,4 +33,12 @@ data class WeatherFailure(val kind: WeatherErrorKind, val message: String) {
             else -> WeatherFailure(WeatherErrorKind.UNKNOWN, "Météo indisponible. Réessayez dans un instant.")
         }
     }
+}
+
+/** User-facing text for a failed city search; never shows raw technical messages such as "HTTP 503". */
+fun cityLookupErrorMessage(error: Exception): String = when (WeatherFailure.from(error).kind) {
+    WeatherErrorKind.CONNECTION -> "Impossible de joindre le service de recherche. Vérifiez votre connexion Internet."
+    WeatherErrorKind.TIMEOUT -> "La recherche a pris trop de temps. Réessayez."
+    WeatherErrorKind.RATE_LIMITED -> "Trop de demandes. Réessayez un peu plus tard."
+    else -> "Recherche de ville indisponible. Réessayez dans un instant."
 }

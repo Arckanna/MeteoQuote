@@ -46,7 +46,9 @@ L’observation Room reste indépendante du travail réseau. Un rafraîchissemen
 
 ### 2. Identité du lieu
 
-Clé de cache déterministe fondée sur les coordonnées réellement demandées, jamais sur le libellé. Pour la première version : représentation normalisée des deux `Double` validés et finis, avec −0 normalisé en 0, sans arrondi géographique implicite. Même coordonnées = même cache ; mêmes noms avec coordonnées différentes = caches différents. Renommer un lieu ne change pas la clé.
+Clé de cache déterministe fondée sur les coordonnées, jamais sur le libellé : les deux `Double` validés et finis, **arrondis à 3 décimales (~100 m)**, avec −0 normalisé en 0. Renommer un lieu ne change pas la clé ; des lieux distants de plusieurs centaines de mètres ont des caches différents.
+
+> Révision (novembre 2026) : la première version n'arrondissait pas. Or « Ma position » remplace les coordonnées de la ville à chaque détection, et deux mesures GPS diffèrent toujours de quelques mètres : chaque détection créait une nouvelle clé (cache perdu, nouvelle requête, temporisation contournée). L'arrondi à ~100 m reste plus fin que la grille des prévisions Open-Meteo. Les requêtes réseau utilisent toujours les coordonnées exactes ; seule l'identité du cache est arrondie. Aucun changement de schéma Room : après la mise à jour, les anciens enregistrements (clés non arrondies) ne sont plus référencés et sont supprimés par le nettoyage habituel, au prix d'un téléchargement par ville. Limite connue : deux points très proches de part et d'autre d'une frontière d'arrondi ont encore des clés différentes.
 
 Les listes de villes et la sélection restent inchangées en SharedPreferences. Une nouvelle position géographique utilise une nouvelle clé ; ne pas réattribuer l’ancien instantané au nouveau point. Quand une position est remplacée, nettoyer les entrées qui ne sont plus référencées plutôt que constituer un historique de déplacements. Les récents existants restent des références à prendre en compte.
 

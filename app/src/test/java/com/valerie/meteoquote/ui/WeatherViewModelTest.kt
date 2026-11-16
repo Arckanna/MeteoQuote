@@ -688,6 +688,18 @@ class WeatherViewModelTest {
         assertEquals(null, vm.uiState.value.error)
     }
 
+    @Test fun removingCityReusesCacheInsteadOfForcingNetwork() = runTest(testDispatcher) {
+        every { mockCityRepository.loadCities() } returns listOf(City("Paris", 48.0, 2.0), City("Lyon", 45.0, 4.0))
+        coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
+        val vm = createViewModel()
+        advanceUntilIdle()
+        vm.removeCity(0)
+        advanceUntilIdle()
+        assertEquals("Lyon", vm.uiState.value.cities.single().label)
+        io.mockk.verify { mockWeatherRepository.refreshUpdates(45.0, 4.0, false) }
+        io.mockk.verify(exactly = 0) { mockWeatherRepository.refreshUpdates(any(), any(), true) }
+    }
+
     @Test fun manualCityNeedsNoLocation() = runTest(testDispatcher) {
         coEvery { mockWeatherRepository.fetchWeather(any(), any()) } returns createMockWeatherResult()
         val vm = createViewModel()

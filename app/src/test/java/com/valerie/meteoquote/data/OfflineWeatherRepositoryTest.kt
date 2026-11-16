@@ -225,6 +225,30 @@ class OfflineWeatherRepositoryTest {
         coVerify(exactly = 6) { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) }
     }
 
+    @Test fun nearbyGpsFixReusesCacheWithoutNetwork() = runBlocking {
+        finished()
+        clearMocks(transport, answers = false)
+        // A new "Ma position" fix about 20 m away from the stored one.
+        assertEquals(now, repo.fetchWeatherIfNeeded(48.0002, 2.0001, force = false).fetchedAt)
+        coVerify(exactly = 0) { transport.get(any()) }
+    }
+
+    @Test fun automaticWidgetFetchDuringCooldownReportsDeferralWithoutRequest() = runBlocking {
+        finished()
+        clearMocks(transport, answers = false)
+        coEvery { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) } throws java.io.IOException("offline")
+        clock.current = now.plusSeconds(1800)
+        try { repo.fetchWeatherIfNeeded(48.0, 2.0, force = false); fail() } catch (e: java.io.IOException) { }
+        clock.current = clock.current.plusSeconds(30)
+        try {
+            repo.fetchWeatherIfNeeded(48.0, 2.0, force = false)
+            fail("Expected a deferred refresh")
+        } catch (e: RefreshDeferredException) {
+            assertEquals("offline", e.failure.message)
+        }
+        coVerify(exactly = 1) { transport.get(match { it.startsWith("https://api.open-meteo.com/") }) }
+    }
+
     @Test fun airFailureHasItsOwnCooldownWithoutBlockingWeatherOrManualRefresh() = runBlocking {
         finished()
         clearMocks(transport, answers = false)

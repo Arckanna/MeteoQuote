@@ -80,19 +80,28 @@ class WeatherWidgetWorker @dagger.assisted.AssistedInject constructor(
             // The error has been rendered. Do not fail the local chain and cancel a
             // newer selection/forced refresh already appended behind this pass.
             if (!inputData.getBoolean(NETWORK, false)) return Result.success()
-            val retryable = when (e) {
-                is com.valerie.meteoquote.data.HttpStatusException -> e.statusCode in setOf(408, 429, 500, 502, 503, 504)
-                is com.valerie.meteoquote.data.InvalidResponseException -> false
-                is java.io.IOException -> true
-                else -> false
-            }
-            return if (inputData.getBoolean(NETWORK, false) && retryable && runAttemptCount < 2) Result.retry()
+            return if (shouldRetry(e, networkRun = true, attempt = runAttemptCount)) Result.retry()
                 else Result.failure()
         }
     }
 
     companion object {
-        const val WIDGET_IDS = "widget_ids"
+        /**
+         * WorkManager retries only real, transient network failures of the network job.
+         * A refresh deferred by the repository cooldown sent no request: retrying after 30 s
+         * would hit the same cooldown, so the next automatic cycle handles it instead.
+         */
+        internal fun shouldRetry(error: Exception, networkRun: Boolean, attempt: Int): Boolean {
+            val retryable = when (error) {
+                is com.valerie.meteoquote.data.RefreshDeferredException -> false
+                is com.valerie.meteoquote.data.HttpStatusException -> error.statusCode in setOf(408, 429, 500, 502, 503, 504)
+                is com.valerie.meteoquote.data.InvalidResponseException -> false
+                is java.io.IOException -> true
+                else -> false
+            }
+            return networkRun && retryable && attempt < 2
+        }
+
         const val NETWORK = "network"
         const val NETWORK_KEY = "network_key"
         const val FORCE = "force"
