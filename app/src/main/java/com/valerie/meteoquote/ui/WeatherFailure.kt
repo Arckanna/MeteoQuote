@@ -34,11 +34,3 @@ data class WeatherFailure(val kind: WeatherErrorKind, val message: String) {
         }
     }
 }
-
-/** User-facing text for a failed city search; never shows raw technical messages such as "HTTP 503". */
-fun cityLookupErrorMessage(error: Exception): String = when (WeatherFailure.from(error).kind) {
-    WeatherErrorKind.CONNECTION -> "Impossible de joindre le service de recherche. Vérifiez votre connexion Internet."
-    WeatherErrorKind.TIMEOUT -> "La recherche a pris trop de temps. Réessayez."
-    WeatherErrorKind.RATE_LIMITED -> "Trop de demandes. Réessayez un peu plus tard."
-    else -> "Recherche de ville indisponible. Réessayez dans un instant."
-}
